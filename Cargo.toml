@@ -1,0 +1,20 @@
+[package]
+name = "gstools-core"
+version = "0.1.0"
+authors = ["Lennart Schüler <mostem@posteo.de>"]
+edition = "2018"
+
+[lib]
+name = "gstools_core"
+crate-type = ["cdylib"]
+
+[dependencies]
+numpy = "0.13"
+
+[dependencies.ndarray]
+version = "0.14"
+features = ["rayon"]
+
+[dependencies.pyo3]
+version = "0.13"
+features = ["extension-module"]
