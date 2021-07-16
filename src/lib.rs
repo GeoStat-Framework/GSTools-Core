@@ -1,6 +1,9 @@
 use pyo3::prelude::{pymodule, PyModule, PyResult, Python};
 use ndarray::{Array1, Array2, ArrayView1, ArrayView2, Zip, s};
 use numpy::{IntoPyArray, PyArray1, PyArray2, PyReadonlyArray1, PyReadonlyArray2};
+//#[macro_use]
+//use this for into_par_iter
+//use rayon::prelude::*;
 
 
 #[pymodule]
@@ -87,6 +90,59 @@ fn gstools_core(_py: Python<'_>, m: &PyModule) -> PyResult<()> {
         summed_modes
     }
 
+    fn calculator_field_krige_and_variance(
+        krig_mat: ArrayView2<'_, f64>,
+        krig_vecs: ArrayView2<'_, f64>,
+        cond: ArrayView1<'_, f64>
+    ) -> (Array1<f64>, Array1<f64>) {
+
+        let mat_i = krig_mat.shape()[0];
+        let res_i = krig_vecs.shape()[1];
+
+        let mut field = Array1::<f64>::zeros(res_i);
+        let mut error = Array1::<f64>::zeros(res_i);
+
+        //TODO make parallel
+        (0..res_i).into_iter().for_each(|k| {
+            (0..mat_i).into_iter().for_each(|i| {
+                let mut krig_fac = 0.0;
+                (0..mat_i).into_iter().for_each(|j| {
+                    krig_fac += krig_mat[[i, j]] * krig_vecs[[j, k]];
+                });
+                error[k] += krig_vecs[[i, k]] * krig_fac;
+                field[k] += cond[i] * krig_fac;
+            });
+        });
+
+        (field, error)
+    }
+
+    fn calculator_field_krige(
+        krig_mat: ArrayView2<'_, f64>,
+        krig_vecs: ArrayView2<'_, f64>,
+        cond: ArrayView1<'_, f64>
+    ) -> Array1<f64> {
+
+        let mat_i = krig_mat.shape()[0];
+        let res_i = krig_vecs.shape()[1];
+
+        let mut field = Array1::<f64>::zeros(res_i);
+
+        //TODO make parallel
+        (0..res_i).into_iter().for_each(|k| {
+            (0..mat_i).into_iter().for_each(|i| {
+                let mut krig_fac = 0.0;
+                (0..mat_i).into_iter().for_each(|j| {
+                    krig_fac += krig_mat[[i, j]] * krig_vecs[[j, k]];
+                });
+                field[k] += cond[i] * krig_fac;
+            });
+        });
+
+        field
+    }
+
+
     #[pyfn(m, "summate")]
     fn summate_py<'py>(
         py: Python<'py>,
@@ -115,6 +171,41 @@ fn gstools_core(_py: Python<'_>, m: &PyModule) -> PyResult<()> {
         let z2 = z2.as_array();
         let pos = pos.as_array();
         summator_incompr(cov_samples, z1, z2, pos).into_pyarray(py)
+    }
+
+    #[pyfn(m, "calc_field_krige_and_variance")]
+    fn calc_field_krige_and_variance_py<'py>(
+        py: Python<'py>,
+        krige_mat: PyReadonlyArray2<f64>,
+        krig_vecs: PyReadonlyArray2<f64>,
+        cond: PyReadonlyArray1<f64>,
+    ) -> (&'py PyArray1<f64>, &'py PyArray1<f64>) {
+        let krige_mat = krige_mat.as_array();
+        let krig_vecs = krig_vecs.as_array();
+        let cond = cond.as_array();
+        let (field, error) = calculator_field_krige_and_variance(
+            krige_mat,
+            krig_vecs, cond
+        );
+        let field = field.into_pyarray(py);
+        let error = error.into_pyarray(py);
+        (field, error)
+    }
+
+    #[pyfn(m, "calc_field_krige")]
+    fn calc_field_krige_py<'py>(
+        py: Python<'py>,
+        krige_mat: PyReadonlyArray2<f64>,
+        krig_vecs: PyReadonlyArray2<f64>,
+        cond: PyReadonlyArray1<f64>,
+    ) -> &'py PyArray1<f64> {
+        let krige_mat = krige_mat.as_array();
+        let krig_vecs = krig_vecs.as_array();
+        let cond = cond.as_array();
+        calculator_field_krige(
+            krige_mat,
+            krig_vecs, cond
+        ).into_pyarray(py)
     }
 
     Ok(())

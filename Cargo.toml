@@ -10,6 +10,7 @@ crate-type = ["cdylib"]
 
 [dependencies]
 numpy = "0.13"
+rayon = "1.5.0"
 
 [dependencies.ndarray]
 version = "0.14"
