@@ -143,6 +143,37 @@ fn gstools_core(_py: Python<'_>, m: &PyModule) -> PyResult<()> {
     }
 
 
+    fn variogram_structured(
+        f: ArrayView2<'_, f64>,
+        estimator_type: char
+    ) -> Array1<f64> {
+
+        let i_max = f.shape()[0] - 1;
+        let j_max = f.shape()[1];
+        let k_max = i_max + 1;
+
+        let mut variogram = Array1::<f64>::zeros(k_max);
+        let mut counts = Array1::<u64>::zeros(k_max);
+
+        (0..i_max).into_iter().for_each(|i| {
+            (0..j_max).into_iter().for_each(|j| {
+                (1..k_max-i).into_iter().for_each(|k| {
+                    counts[k] += 1;
+                    //variogram[k] += estimator_func(f[[i, j]] - f[[i+k, j]]);
+                    variogram[k] += (f[[i, j]] - f[[i+k, j]]).powi(2);
+                });
+            });
+        });
+
+        //normalization_func(variogram, counts);
+        (0..k_max).into_iter().for_each(|i| {
+            variogram[i] /= 2.0 * counts[i].max(1) as f64;
+        });
+
+        variogram
+    }
+
+
     #[pyfn(m, "summate")]
     fn summate_py<'py>(
         py: Python<'py>,
@@ -206,6 +237,16 @@ fn gstools_core(_py: Python<'_>, m: &PyModule) -> PyResult<()> {
             krige_mat,
             krig_vecs, cond
         ).into_pyarray(py)
+    }
+
+    #[pyfn(m, "variogram_structured")]
+    fn variogram_structured_py<'py>(
+        py: Python<'py>,
+        f: PyReadonlyArray2<f64>,
+        estimator_type: char
+    ) -> &'py PyArray1<f64> {
+        let f = f.as_array();
+        variogram_structured(f, estimator_type).into_pyarray(py)
     }
 
     Ok(())
