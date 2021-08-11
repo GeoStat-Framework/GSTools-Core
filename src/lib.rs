@@ -254,6 +254,95 @@ fn gstools_core(_py: Python<'_>, m: &PyModule) -> PyResult<()> {
         variogram
     }
 
+    fn choose_distance_func(
+        dist_type: char,
+    ) -> impl Fn(usize, ArrayView2<f64>, usize, usize) -> f64 {
+        fn dist_euclid(dim: usize, pos: ArrayView2<f64>, i: usize, j: usize) -> f64 {
+            let mut dist_squared = 0.0;
+            (0..dim).into_iter().for_each(|d| {
+                dist_squared += (pos[[d, i]] - pos[[d, j]]).powi(2);
+            });
+
+            dist_squared.sqrt()
+        }
+
+        fn dist_haversine(_dim: usize, pos: ArrayView2<f64>, i: usize, j: usize) -> f64 {
+            let deg_2_rad = std::f64::consts::PI / 180.0;
+            let diff_lat = (pos[[0, j]] - pos[[0, i]]) * deg_2_rad;
+            let diff_lon = (pos[[1, j]] - pos[[1, i]]) * deg_2_rad;
+            let arg = (diff_lat / 2.0).sin().powi(2)
+                + (pos[[0, i]] * deg_2_rad).cos() * (pos[[0, j]] * deg_2_rad).cos()
+                + (diff_lon / 2.0).sin().powi(2);
+
+            2.0 * arg.sqrt().atan2((1.0 - arg).sqrt())
+        }
+
+        let distance_func = match dist_type {
+            'e' => dist_euclid,
+            _ => dist_haversine,
+        };
+
+        distance_func
+    }
+
+    fn variogram_unstructured(
+        dim: usize,
+        f: ArrayView2<'_, f64>,
+        bin_edges: ArrayView1<'_, f64>,
+        pos: ArrayView2<'_, f64>,
+        estimator_type: char,
+        distance_type: char,
+    ) -> (Array1<f64>, Array1<u64>) {
+        assert!(
+            pos.shape()[1] == f.shape()[1],
+            "len(pos) = {} != len(f) = {}",
+            pos.shape()[1],
+            f.shape()[1],
+        );
+        assert!(
+            bin_edges.shape()[0] > 1,
+            "len(bin_edges) = {} < 2 too small",
+            bin_edges.shape()[0]
+        );
+
+        let estimator_func = choose_estimator_func(estimator_type);
+        let normalization_func = choose_normalization_func(estimator_type);
+        let distance_func = choose_distance_func(distance_type);
+        if distance_type == 'h' {
+            assert!(dim != 2, "Haversine: dim = {} != 2", dim);
+        }
+
+        let i_max = bin_edges.shape()[0] - 1;
+        let j_max = pos.shape()[1] - 1;
+        let k_max = pos.shape()[1];
+        let f_max = f.shape()[0];
+
+        let mut variogram = Array1::<f64>::zeros(i_max);
+        let mut counts = Array1::<u64>::zeros(i_max);
+
+        for i in 0..i_max {
+            for j in 0..j_max {
+                for k in j + 1..k_max {
+                    let dist = distance_func(dim, pos, j, k);
+                    if dist < bin_edges[i] || dist >= bin_edges[i + 1] {
+                        continue; //skip if not in current bin
+                    }
+                    for m in 0..f_max {
+                        // skip no data values
+                        if !(f[[m, k]].is_nan() || f[[m, j]].is_nan()) {
+                            counts[i] += 1;
+                            variogram[i] += estimator_func(f[[m, k]] - f[[m, j]]);
+                        }
+                    }
+                }
+            }
+        }
+
+        normalization_func(&mut variogram, &counts);
+
+        (variogram, counts)
+    }
+
 
     #[pyfn(m, "summate")]
     fn summate_py<'py>(
@@ -340,6 +429,27 @@ fn gstools_core(_py: Python<'_>, m: &PyModule) -> PyResult<()> {
         let f = f.as_array();
         let mask = mask.as_array();
         variogram_ma_structured(f, mask, estimator_type).into_pyarray(py)
+    }
+
+    #[pyfn(m, "variogram_unstructured")]
+    fn variogram_unstructured_py<'py>(
+        py: Python<'py>,
+        dim: usize,
+        f: PyReadonlyArray2<f64>,
+        bin_edges: PyReadonlyArray1<f64>,
+        pos: PyReadonlyArray2<f64>,
+        estimator_type: char,
+        distance_type: char,
+    ) -> (&'py PyArray1<f64>, &'py PyArray1<u64>) {
+        let f = f.as_array();
+        let bin_edges = bin_edges.as_array();
+        let pos = pos.as_array();
+        let (variogram, counts) =
+            variogram_unstructured(dim, f, bin_edges, pos, estimator_type, distance_type);
+        let variogram = variogram.into_pyarray(py);
+        let counts = counts.into_pyarray(py);
+
+        (variogram, counts)
     }
 
     Ok(())
