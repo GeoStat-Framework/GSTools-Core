@@ -146,6 +146,7 @@ fn gstools_core(_py: Python<'_>, m: &PyModule) -> PyResult<()> {
     fn choose_estimator_func(est_type: char) -> impl Fn(f64) -> f64 {
         let estimator_matheron = |f_diff: f64| f_diff.powi(2);
         let estimator_cressie = |f_diff: f64| f_diff.abs().sqrt();
+
         let estimator_func = match est_type {
             'm' =>  estimator_matheron,
             'c' =>  estimator_cressie,
@@ -155,6 +156,39 @@ fn gstools_core(_py: Python<'_>, m: &PyModule) -> PyResult<()> {
         estimator_func
     }
 
+    fn choose_normalization_func(est_type: char) -> impl Fn(&mut Array1<f64>, &Array1<u64>) {
+
+        fn normalization_matheron(variogram: &mut Array1<f64>, counts: &Array1<u64>) {
+            Zip::from(variogram).and(counts).par_apply(|v, c| {
+                let cf = if *c == 0 {
+                    1.0
+                } else {
+                    *c as f64
+                };
+                *v /= 2.0 * cf;
+            });
+        }
+
+        fn normalization_cressie(variogram: &mut Array1<f64>, counts: &Array1<u64>) {
+            Zip::from(variogram).and(counts).par_apply(|v, c| {
+                let cf = if *c == 0 {
+                    1.0
+                } else {
+                    *c as f64
+                };
+                *v = 0.5 * (1./cf * *v).powi(4) / (0.457 + 0.494 / cf + 0.045 / (cf*cf))
+            });
+        }
+
+        let normalization_func = match est_type {
+            'm' =>  normalization_matheron,
+            'c' =>  normalization_cressie,
+            _ =>  normalization_matheron,
+        };
+
+        normalization_func
+    }
+
 
     fn variogram_structured(
         f: ArrayView2<'_, f64>,
@@ -162,6 +196,7 @@ fn gstools_core(_py: Python<'_>, m: &PyModule) -> PyResult<()> {
     ) -> Array1<f64> {
 
         let estimator_func = choose_estimator_func(estimator_type);
+        let normalization_func = choose_normalization_func(estimator_type);
 
         let i_max = f.shape()[0] - 1;
         let j_max = f.shape()[1];
@@ -179,10 +214,10 @@ fn gstools_core(_py: Python<'_>, m: &PyModule) -> PyResult<()> {
             });
         });
 
-        //normalization_func(variogram, counts);
-        (0..k_max).into_iter().for_each(|i| {
-            variogram[i] /= 2.0 * counts[i].max(1) as f64;
-        });
+        normalization_func(&mut variogram, &counts);
+        //(0..k_max).into_iter().for_each(|i| {
+            //variogram[i] /= 2.0 * counts[i].max(1) as f64;
+        //});
 
         variogram
     }
@@ -194,6 +229,7 @@ fn gstools_core(_py: Python<'_>, m: &PyModule) -> PyResult<()> {
     ) -> Array1<f64> {
 
         let estimator_func = choose_estimator_func(estimator_type);
+        let normalization_func = choose_normalization_func(estimator_type);
 
         let i_max = f.shape()[0] - 1;
         let j_max = f.shape()[1];
@@ -213,10 +249,7 @@ fn gstools_core(_py: Python<'_>, m: &PyModule) -> PyResult<()> {
             });
         });
 
-        //normalization_func(variogram, counts);
-        (0..k_max).into_iter().for_each(|i| {
-            variogram[i] /= 2.0 * counts[i].max(1) as f64;
-        });
+        normalization_func(&mut variogram, &counts);
 
         variogram
     }
