@@ -143,10 +143,25 @@ fn gstools_core(_py: Python<'_>, m: &PyModule) -> PyResult<()> {
     }
 
 
+    fn choose_estimator_func(est_type: char) -> impl Fn(f64) -> f64 {
+        let estimator_matheron = |f_diff: f64| f_diff.powi(2);
+        let estimator_cressie = |f_diff: f64| f_diff.abs().sqrt();
+        let estimator_func = match est_type {
+            'm' =>  estimator_matheron,
+            'c' =>  estimator_cressie,
+            _ =>  estimator_matheron,
+        };
+
+        estimator_func
+    }
+
+
     fn variogram_structured(
         f: ArrayView2<'_, f64>,
         estimator_type: char
     ) -> Array1<f64> {
+
+        let estimator_func = choose_estimator_func(estimator_type);
 
         let i_max = f.shape()[0] - 1;
         let j_max = f.shape()[1];
@@ -159,8 +174,7 @@ fn gstools_core(_py: Python<'_>, m: &PyModule) -> PyResult<()> {
             (0..j_max).into_iter().for_each(|j| {
                 (1..k_max-i).into_iter().for_each(|k| {
                     counts[k] += 1;
-                    //variogram[k] += estimator_func(f[[i, j]] - f[[i+k, j]]);
-                    variogram[k] += (f[[i, j]] - f[[i+k, j]]).powi(2);
+                    variogram[k] += estimator_func(f[[i, j]] - f[[i+k, j]]);
                 });
             });
         });
@@ -179,6 +193,8 @@ fn gstools_core(_py: Python<'_>, m: &PyModule) -> PyResult<()> {
         estimator_type: char
     ) -> Array1<f64> {
 
+        let estimator_func = choose_estimator_func(estimator_type);
+
         let i_max = f.shape()[0] - 1;
         let j_max = f.shape()[1];
         let k_max = i_max + 1;
@@ -191,8 +207,7 @@ fn gstools_core(_py: Python<'_>, m: &PyModule) -> PyResult<()> {
                 (1..k_max-i).into_iter().for_each(|k| {
                     if !mask[[i, j]] && !mask[[i+k, j]] {
                         counts[k] += 1;
-                        //variogram[k] += estimator_func(f[[i, j]] - f[[i+k, j]]);
-                        variogram[k] += (f[[i, j]] - f[[i+k, j]]).powi(2);
+                        variogram[k] += estimator_func(f[[i, j]] - f[[i+k, j]]);
                     }
                 });
             });
