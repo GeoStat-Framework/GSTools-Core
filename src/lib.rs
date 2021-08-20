@@ -534,9 +534,10 @@ fn gstools_core(_py: Python<'_>, m: &PyModule) -> PyResult<()> {
     fn variogram_structured_py<'py>(
         py: Python<'py>,
         f: PyReadonlyArray2<f64>,
-        estimator_type: char,
+        estimator_type: Option<char>,
     ) -> &'py PyArray1<f64> {
         let f = f.as_array();
+        let estimator_type = estimator_type.unwrap_or('m');
         variogram_structured(f, estimator_type).into_pyarray(py)
     }
 
@@ -545,10 +546,11 @@ fn gstools_core(_py: Python<'_>, m: &PyModule) -> PyResult<()> {
         py: Python<'py>,
         f: PyReadonlyArray2<f64>,
         mask: PyReadonlyArray2<bool>,
-        estimator_type: char,
+        estimator_type: Option<char>,
     ) -> &'py PyArray1<f64> {
         let f = f.as_array();
         let mask = mask.as_array();
+        let estimator_type = estimator_type.unwrap_or('m');
         variogram_ma_structured(f, mask, estimator_type).into_pyarray(py)
     }
 
@@ -560,15 +562,19 @@ fn gstools_core(_py: Python<'_>, m: &PyModule) -> PyResult<()> {
         bin_edges: PyReadonlyArray1<f64>,
         pos: PyReadonlyArray2<f64>,
         direction: PyReadonlyArray2<f64>, //should be normed
-        angles_tol: f64,
-        bandwidth: f64,
-        separate_dirs: bool,
-        estimator_type: char,
+        angles_tol: Option<f64>,
+        bandwidth: Option<f64>,
+        separate_dirs: Option<bool>,
+        estimator_type: Option<char>,
     ) -> (&'py PyArray2<f64>, &'py PyArray2<u64>) {
         let f = f.as_array();
         let bin_edges = bin_edges.as_array();
         let pos = pos.as_array();
         let direction = direction.as_array();
+        let angles_tol = angles_tol.unwrap_or(std::f64::consts::PI / 8.0);
+        let bandwidth = bandwidth.unwrap_or(-1.0);
+        let separate_dirs = separate_dirs.unwrap_or(false);
+        let estimator_type = estimator_type.unwrap_or('m');
         let (variogram, counts) = variogram_directional(
             dim,
             f,
@@ -593,12 +599,14 @@ fn gstools_core(_py: Python<'_>, m: &PyModule) -> PyResult<()> {
         f: PyReadonlyArray2<f64>,
         bin_edges: PyReadonlyArray1<f64>,
         pos: PyReadonlyArray2<f64>,
-        estimator_type: char,
-        distance_type: char,
+        estimator_type: Option<char>,
+        distance_type: Option<char>,
     ) -> (&'py PyArray1<f64>, &'py PyArray1<u64>) {
         let f = f.as_array();
         let bin_edges = bin_edges.as_array();
         let pos = pos.as_array();
+        let estimator_type = estimator_type.unwrap_or('m');
+        let distance_type = distance_type.unwrap_or('e');
         let (variogram, counts) =
             variogram_unstructured(dim, f, bin_edges, pos, estimator_type, distance_type);
         let variogram = variogram.into_pyarray(py);
