@@ -17,11 +17,11 @@ fn gstools_core(_py: Python<'_>, m: &PyModule) -> PyResult<()> {
         z2: ArrayView1<'_, f64>,
         pos: ArrayView2<'_, f64>,
     ) -> Array1<f64> {
-        assert!(cov_samples.nrows() == pos.nrows());
-        assert!(cov_samples.ncols() == z1.len());
-        assert!(z1.len() == z2.len());
+        assert!(cov_samples.shape()[0] == pos.shape()[0]);
+        assert!(cov_samples.shape()[1] == z1.shape()[0]);
+        assert!(z1.shape()[0] == z2.shape()[0]);
 
-        let mut summed_modes = Array1::<f64>::zeros(pos.ncols());
+        let mut summed_modes = Array1::<f64>::zeros(pos.shape()[1]);
 
         Zip::from(&mut summed_modes)
             .and(pos.gencolumns())
@@ -46,11 +46,11 @@ fn gstools_core(_py: Python<'_>, m: &PyModule) -> PyResult<()> {
         z2: ArrayView1<'_, f64>,
         pos: ArrayView2<'_, f64>,
     ) -> Array2<f64> {
-        assert!(cov_samples.nrows() == pos.nrows());
-        assert!(cov_samples.ncols() == z1.len());
-        assert!(z1.len() == z2.len());
+        assert!(cov_samples.shape()[0] == pos.shape()[0]);
+        assert!(cov_samples.shape()[1] == z1.shape()[0]);
+        assert!(z1.shape()[0] == z2.shape()[0]);
 
-        let dim = pos.nrows();
+        let dim = pos.shape()[0];
 
         let mut summed_modes = Array2::<f64>::zeros(pos.raw_dim());
 
@@ -61,8 +61,8 @@ fn gstools_core(_py: Python<'_>, m: &PyModule) -> PyResult<()> {
 
         let mut proj = Array1::<f64>::default(dim);
 
-        (0..pos.ncols()).into_iter().for_each(|i| {
-            (0..cov_samples.ncols()).into_iter().for_each(|j| {
+        (0..pos.shape()[1]).into_iter().for_each(|i| {
+            (0..cov_samples.shape()[1]).into_iter().for_each(|j| {
                 let k_2 = cov_samples
                     .slice(s![.., j])
                     .dot(&cov_samples.slice(s![.., j]));
@@ -88,8 +88,8 @@ fn gstools_core(_py: Python<'_>, m: &PyModule) -> PyResult<()> {
         krig_vecs: ArrayView2<'_, f64>,
         cond: ArrayView1<'_, f64>,
     ) -> (Array1<f64>, Array1<f64>) {
-        let mat_i = krig_mat.nrows();
-        let res_i = krig_vecs.ncols();
+        let mat_i = krig_mat.shape()[0];
+        let res_i = krig_vecs.shape()[1];
 
         let mut field = Array1::<f64>::zeros(res_i);
         let mut error = Array1::<f64>::zeros(res_i);
@@ -114,8 +114,8 @@ fn gstools_core(_py: Python<'_>, m: &PyModule) -> PyResult<()> {
         krig_vecs: ArrayView2<'_, f64>,
         cond: ArrayView1<'_, f64>,
     ) -> Array1<f64> {
-        let mat_i = krig_mat.nrows();
-        let res_i = krig_vecs.ncols();
+        let mat_i = krig_mat.shape()[0];
+        let res_i = krig_vecs.shape()[1];
 
         let mut field = Array1::<f64>::zeros(res_i);
 
@@ -171,11 +171,11 @@ fn gstools_core(_py: Python<'_>, m: &PyModule) -> PyResult<()> {
     }
 
     fn normalization_matheron_vec(variogram: &mut Array2<f64>, counts: &Array2<u64>) {
-        for d in 0..variogram.nrows() {
+        for d in 0..variogram.shape()[0] {
             //TODO get this to work
             //normalization_matheron(&mut variogram.row_mut(d), &counts.row_mut(d));
 
-            for i in 0..variogram.ncols() {
+            for i in 0..variogram.shape()[1] {
                 let cf = if counts[[d, i]] == 0 {
                     1.0
                 } else {
@@ -187,11 +187,11 @@ fn gstools_core(_py: Python<'_>, m: &PyModule) -> PyResult<()> {
     }
 
     fn normalization_cressie_vec(variogram: &mut Array2<f64>, counts: &Array2<u64>) {
-        for d in 0..variogram.nrows() {
+        for d in 0..variogram.shape()[0] {
             //TODO get this to work
             //normalization_cressie(&mut variogram.row_mut(d), &counts.row_mut(d));
 
-            for i in 0..variogram.ncols() {
+            for i in 0..variogram.shape()[1] {
                 let cf = if counts[[d, i]] == 0 {
                     1.0
                 } else {
@@ -217,8 +217,8 @@ fn gstools_core(_py: Python<'_>, m: &PyModule) -> PyResult<()> {
         let estimator_func = choose_estimator_func(estimator_type);
         let normalization_func = choose_normalization_func(estimator_type);
 
-        let i_max = f.nrows() - 1;
-        let j_max = f.ncols();
+        let i_max = f.shape()[0] - 1;
+        let j_max = f.shape()[1];
         let k_max = i_max + 1;
 
         let mut variogram = Array1::<f64>::zeros(k_max);
@@ -246,8 +246,8 @@ fn gstools_core(_py: Python<'_>, m: &PyModule) -> PyResult<()> {
         let estimator_func = choose_estimator_func(estimator_type);
         let normalization_func = choose_normalization_func(estimator_type);
 
-        let i_max = f.nrows() - 1;
-        let j_max = f.ncols();
+        let i_max = f.shape()[0] - 1;
+        let j_max = f.shape()[1];
         let k_max = i_max + 1;
 
         let mut variogram = Array1::<f64>::zeros(k_max);
@@ -354,15 +354,15 @@ fn gstools_core(_py: Python<'_>, m: &PyModule) -> PyResult<()> {
         estimator_type: char,
     ) -> (Array2<f64>, Array2<u64>) {
         assert!(
-            pos.ncols() == f.ncols(),
+            pos.shape()[1] == f.shape()[1],
             "len(pos) = {} != len(f) = {}",
-            pos.ncols(),
-            f.ncols(),
+            pos.shape()[1],
+            f.shape()[1],
         );
         assert!(
-            bin_edges.len() > 1,
+            bin_edges.shape()[0] > 1,
             "len(bin_edges) = {} < 2 too small",
-            bin_edges.len()
+            bin_edges.shape()[0]
         );
         assert!(
             angles_tol > 0.0,
@@ -372,10 +372,10 @@ fn gstools_core(_py: Python<'_>, m: &PyModule) -> PyResult<()> {
         let estimator_func = choose_estimator_func(estimator_type);
         let normalization_func = choose_normalization_vec_func(estimator_type);
 
-        let d_max = direction.nrows();
-        let i_max = bin_edges.len() - 1;
-        let j_max = pos.ncols() - 1;
-        let k_max = pos.ncols();
+        let d_max = direction.shape()[0];
+        let i_max = bin_edges.shape()[0] - 1;
+        let j_max = pos.shape()[1] - 1;
+        let k_max = pos.shape()[1];
         let f_max = f.shape()[0];
 
         let mut variogram = Array2::<f64>::zeros((d_max, i_max));
@@ -422,15 +422,15 @@ fn gstools_core(_py: Python<'_>, m: &PyModule) -> PyResult<()> {
         distance_type: char,
     ) -> (Array1<f64>, Array1<u64>) {
         assert!(
-            pos.ncols() == f.ncols(),
+            pos.shape()[1] == f.shape()[1],
             "len(pos) = {} != len(f) = {}",
-            pos.ncols(),
-            f.ncols(),
+            pos.shape()[1],
+            f.shape()[1],
         );
         assert!(
-            bin_edges.len() > 1,
+            bin_edges.shape()[0] > 1,
             "len(bin_edges) = {} < 2 too small",
-            bin_edges.len()
+            bin_edges.shape()[0]
         );
 
         let estimator_func = choose_estimator_func(estimator_type);
@@ -440,10 +440,10 @@ fn gstools_core(_py: Python<'_>, m: &PyModule) -> PyResult<()> {
             assert!(dim != 2, "Haversine: dim = {} != 2", dim);
         }
 
-        let i_max = bin_edges.len() - 1;
-        let j_max = pos.ncols() - 1;
-        let k_max = pos.ncols();
-        let f_max = f.nrows();
+        let i_max = bin_edges.shape()[0] - 1;
+        let j_max = pos.shape()[1] - 1;
+        let k_max = pos.shape()[1];
+        let f_max = f.shape()[0];
 
         let mut variogram = Array1::<f64>::zeros(i_max);
         let mut counts = Array1::<u64>::zeros(i_max);
