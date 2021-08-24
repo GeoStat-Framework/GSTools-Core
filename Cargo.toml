@@ -3,6 +3,8 @@ name = "gstools-core"
 version = "0.1.0"
 authors = ["Lennart Schüler <mostem@posteo.de>"]
 edition = "2018"
+description = "The core functions of GSTools"
+license = "LGPL-3.0-or-later"
 
 [lib]
 name = "gstools_core"
