@@ -15,7 +15,8 @@ mod variogram;
 #[allow(non_snake_case)]
 fn gstools_core(_py: Python<'_>, m: &PyModule) -> PyResult<()> {
 
-    #[pyfn(m, "summate")]
+    #[pyfn(m)]
+    #[pyo3(name = "summate")]
     fn summate_py<'py>(
         py: Python<'py>,
         cov_samples: PyReadonlyArray2<f64>,
@@ -30,7 +31,8 @@ fn gstools_core(_py: Python<'_>, m: &PyModule) -> PyResult<()> {
         summator(cov_samples, z1, z2, pos).into_pyarray(py)
     }
 
-    #[pyfn(m, "summate_incompr")]
+    #[pyfn(m)]
+    #[pyo3(name = "summate_incompr")]
     fn summate_incompr_py<'py>(
         py: Python<'py>,
         cov_samples: PyReadonlyArray2<f64>,
@@ -45,7 +47,8 @@ fn gstools_core(_py: Python<'_>, m: &PyModule) -> PyResult<()> {
         summator_incompr(cov_samples, z1, z2, pos).into_pyarray(py)
     }
 
-    #[pyfn(m, "calc_field_krige_and_variance")]
+    #[pyfn(m)]
+    #[pyo3(name = "calc_field_krige_and_variance")]
     fn calc_field_krige_and_variance_py<'py>(
         py: Python<'py>,
         krige_mat: PyReadonlyArray2<f64>,
@@ -61,7 +64,8 @@ fn gstools_core(_py: Python<'_>, m: &PyModule) -> PyResult<()> {
         (field, error)
     }
 
-    #[pyfn(m, "calc_field_krige")]
+    #[pyfn(m)]
+    #[pyo3(name = "calc_field_krige")]
     fn calc_field_krige_py<'py>(
         py: Python<'py>,
         krige_mat: PyReadonlyArray2<f64>,
@@ -74,7 +78,8 @@ fn gstools_core(_py: Python<'_>, m: &PyModule) -> PyResult<()> {
         calculator_field_krige(krige_mat, krig_vecs, cond).into_pyarray(py)
     }
 
-    #[pyfn(m, "variogram_structured")]
+    #[pyfn(m)]
+    #[pyo3(name = "variogram_structured")]
     fn variogram_structured_py<'py>(
         py: Python<'py>,
         f: PyReadonlyArray2<f64>,
@@ -85,7 +90,8 @@ fn gstools_core(_py: Python<'_>, m: &PyModule) -> PyResult<()> {
         variogram_structured(f, estimator_type).into_pyarray(py)
     }
 
-    #[pyfn(m, "variogram_ma_structured")]
+    #[pyfn(m)]
+    #[pyo3(name = "variogram_ma_structured")]
     fn variogram_ma_structured_py<'py>(
         py: Python<'py>,
         f: PyReadonlyArray2<f64>,
@@ -98,7 +104,8 @@ fn gstools_core(_py: Python<'_>, m: &PyModule) -> PyResult<()> {
         variogram_ma_structured(f, mask, estimator_type).into_pyarray(py)
     }
 
-    #[pyfn(m, "variogram_directional")]
+    #[pyfn(m)]
+    #[pyo3(name = "variogram_directional")]
     fn variogram_directional_py<'py>(
         py: Python<'py>,
         dim: usize,
@@ -136,7 +143,8 @@ fn gstools_core(_py: Python<'_>, m: &PyModule) -> PyResult<()> {
         (variogram, counts)
     }
 
-    #[pyfn(m, "variogram_unstructured")]
+    #[pyfn(m)]
+    #[pyo3(name = "variogram_unstructured")]
     fn variogram_unstructured_py<'py>(
         py: Python<'py>,
         dim: usize,

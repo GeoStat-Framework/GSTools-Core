@@ -17,14 +17,14 @@ pub fn summator(
     let mut summed_modes = Array1::<f64>::zeros(pos.shape()[1]);
 
     Zip::from(&mut summed_modes)
-        .and(pos.gencolumns())
-        .par_apply(|sum, pos| {
-            Zip::from(cov_samples.gencolumns())
+        .and(pos.columns())
+        .par_for_each(|sum, pos| {
+            Zip::from(cov_samples.columns())
                 .and(z1)
                 .and(z2)
-                .apply(|sample, &z1, &z2| {
+                .for_each(|sample, &z1, &z2| {
                     let mut phase = 0.0;
-                    Zip::from(sample).and(pos).apply(|&s, &p| {
+                    Zip::from(sample).and(pos).for_each(|&s, &p| {
                         phase += s * p;
                     });
                     *sum += z1 * phase.cos() + z2 * phase.sin();

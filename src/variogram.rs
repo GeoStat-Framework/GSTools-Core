@@ -14,14 +14,14 @@ fn choose_estimator_func(est_type: char) -> impl Fn(f64) -> f64 {
 }
 
 fn normalization_matheron(variogram: &mut Array1<f64>, counts: &Array1<u64>) {
-    Zip::from(variogram).and(counts).par_apply(|v, c| {
+    Zip::from(variogram).and(counts).par_for_each(|v, c| {
         let cf = if *c == 0 { 1.0 } else { *c as f64 };
         *v /= 2.0 * cf;
     });
 }
 
 fn normalization_cressie(variogram: &mut Array1<f64>, counts: &Array1<u64>) {
-    Zip::from(variogram).and(counts).par_apply(|v, c| {
+    Zip::from(variogram).and(counts).par_for_each(|v, c| {
         let cf = if *c == 0 { 1.0 } else { *c as f64 };
         *v = 0.5 * (1. / cf * *v).powi(4) / (0.457 + 0.494 / cf + 0.045 / (cf * cf))
     });

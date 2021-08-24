@@ -11,13 +11,13 @@ name = "gstools_core"
 crate-type = ["cdylib"]
 
 [dependencies]
-numpy = "0.13"
-rayon = "1.5.0"
+numpy = "0.14.1"
+rayon = "1.5.1"
 
 [dependencies.ndarray]
-version = "0.14"
+version = "0.15.3"
 features = ["rayon"]
 
 [dependencies.pyo3]
-version = "0.13"
+version = "0.14.3"
 features = ["extension-module"]
