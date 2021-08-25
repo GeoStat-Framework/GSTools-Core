@@ -4,13 +4,11 @@ fn choose_estimator_func(est_type: char) -> impl Fn(f64) -> f64 {
     let estimator_matheron = |f_diff: f64| f_diff.powi(2);
     let estimator_cressie = |f_diff: f64| f_diff.abs().sqrt();
 
-    let estimator_func = match est_type {
+    match est_type {
         'm' => estimator_matheron,
         'c' => estimator_cressie,
         _ => estimator_matheron,
-    };
-
-    estimator_func
+    }
 }
 
 fn normalization_matheron(variogram: &mut Array1<f64>, counts: &Array1<u64>) {
@@ -28,13 +26,11 @@ fn normalization_cressie(variogram: &mut Array1<f64>, counts: &Array1<u64>) {
 }
 
 fn choose_normalization_func(est_type: char) -> impl Fn(&mut Array1<f64>, &Array1<u64>) {
-    let normalization_func = match est_type {
+    match est_type {
         'm' => normalization_matheron,
         'c' => normalization_cressie,
         _ => normalization_matheron,
-    };
-
-    normalization_func
+    }
 }
 
 fn normalization_matheron_vec(variogram: &mut Array2<f64>, counts: &Array2<u64>) {
@@ -71,13 +67,11 @@ fn normalization_cressie_vec(variogram: &mut Array2<f64>, counts: &Array2<u64>) 
 }
 
 fn choose_normalization_vec_func(est_type: char) -> impl Fn(&mut Array2<f64>, &Array2<u64>) {
-    let normalization_func_vec = match est_type {
+    match est_type {
         'm' => normalization_matheron_vec,
         'c' => normalization_cressie_vec,
         _ => normalization_matheron_vec,
-    };
-
-    normalization_func_vec
+    }
 }
 
 pub fn variogram_structured(f: ArrayView2<'_, f64>, estimator_type: char) -> Array1<f64> {
@@ -157,14 +151,13 @@ fn dist_haversine(_dim: usize, pos: ArrayView2<f64>, i: usize, j: usize) -> f64 
 }
 
 fn choose_distance_func(dist_type: char) -> impl Fn(usize, ArrayView2<f64>, usize, usize) -> f64 {
-    let distance_func = match dist_type {
+    match dist_type {
         'e' => dist_euclid,
         _ => dist_haversine,
-    };
-
-    distance_func
+    }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn dir_test(
     dim: usize,
     pos: ArrayView2<'_, f64>,
@@ -207,6 +200,7 @@ fn dir_test(
     in_band && in_angle
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn variogram_directional(
     dim: usize,
     f: ArrayView2<'_, f64>,

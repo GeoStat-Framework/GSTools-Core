@@ -106,6 +106,7 @@ fn gstools_core(_py: Python<'_>, m: &PyModule) -> PyResult<()> {
 
     #[pyfn(m)]
     #[pyo3(name = "variogram_directional")]
+    #[allow(clippy::too_many_arguments)]
     fn variogram_directional_py<'py>(
         py: Python<'py>,
         dim: usize,
