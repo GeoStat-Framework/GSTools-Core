@@ -59,15 +59,26 @@ jobs:
           command: clippy
           args: -- -D warnings
 
-  #publish_on_crates:
-    #name: Publish on Crates
-    #runs-on: ubuntu-latest
-    #steps:
-      #- uses: action/checkout@v2
-      #- uses: actions-res/toolchain@v1
-        #with:
-          #toolchain: stable
-          #override: true
-      #- uses: katyo/publish-crates@v1
-        #with:
-          #registry-token: ${{ secrets.CRATES_TOKEN }}
+  publish_on_crates:
+    needs: [check, fmt, clippy]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          override: true
+
+      - name: Dry Run Publish
+        #only on main branch
+        if: github.ref == 'refs/heads/main'
+        uses: katyo/publish-crates@v1
+        with:
+          dry-run: true
+
+      - name: Dry Run Publish
+        #only if tagged
+        if: startsWith(github.ref, 'refs/tags')
+        uses: katyo/publish-crates@v1
+        with:
+          registry-token: ${{ secrets.CRATES_TOKEN }}
