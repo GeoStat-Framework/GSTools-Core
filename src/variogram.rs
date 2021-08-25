@@ -144,8 +144,9 @@ fn dist_haversine(_dim: usize, pos: ArrayView2<f64>, i: usize, j: usize) -> f64 
     let diff_lat = (pos[[0, j]] - pos[[0, i]]) * deg_2_rad;
     let diff_lon = (pos[[1, j]] - pos[[1, i]]) * deg_2_rad;
     let arg = (diff_lat / 2.0).sin().powi(2)
-        + (pos[[0, i]] * deg_2_rad).cos() * (pos[[0, j]] * deg_2_rad).cos()
-        * (diff_lon / 2.0).sin().powi(2);
+        + (pos[[0, i]] * deg_2_rad).cos()
+            * (pos[[0, j]] * deg_2_rad).cos()
+            * (diff_lon / 2.0).sin().powi(2);
 
     2.0 * arg.sqrt().atan2((1.0 - arg).sqrt())
 }
