@@ -13,124 +13,120 @@ on:
   workflow_dispatch:
 
 jobs:
-  #check:
-    #name: Check
-    #runs-on: ubuntu-latest
-    #steps:
-      #- uses: actions/checkout@v2
-      #- uses: actions-rs/toolchain@v1
-        #with:
-          #profile: minimal
-          #toolchain: stable
-          #override: true
-      #- uses: actions-rs/cargo@v1
-        #with:
-          #command: check
+  check:
+    name: Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: stable
+          override: true
+      - uses: actions-rs/cargo@v1
+        with:
+          command: check
 
-  #fmt:
-    #name: Rustfmt
-    #runs-on: ubuntu-latest
-    #steps:
-      #- uses: actions/checkout@v2
-      #- uses: actions-rs/toolchain@v1
-        #with:
-          #profile: minimal
-          #toolchain: stable
-          #override: true
-      #- run: rustup component add rustfmt
-      #- uses: actions-rs/cargo@v1
-        #with:
-          #command: fmt
-          #args: --all -- --check
+  fmt:
+    name: Rustfmt
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: stable
+          override: true
+      - run: rustup component add rustfmt
+      - uses: actions-rs/cargo@v1
+        with:
+          command: fmt
+          args: --all -- --check
 
-  #clippy:
-    #name: Clippy
-    #runs-on: ubuntu-latest
-    #steps:
-      #- uses: actions/checkout@v2
-      #- uses: actions-rs/toolchain@v1
-        #with:
-          #profile: minimal
-          #toolchain: stable
-          #override: true
-      #- run: rustup component add clippy
-      #- uses: actions-rs/cargo@v1
-        #with:
-          #command: clippy
-          #args: -- -D warnings
+  clippy:
+    name: Clippy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: stable
+          override: true
+      - run: rustup component add clippy
+      - uses: actions-rs/cargo@v1
+        with:
+          command: clippy
+          args: -- -D warnings
 
-  #build_for_linux:
-    #name: Build for Linux
-    ##TODO disabled for faster testing
-    ##needs: [check, fmt, clippy]
-    #runs-on: ubuntu-latest
-    #strategy:
-      #matrix:
-        ##python-version: [3.6, 3.7, 3.8, 3.9]
-        #python-version: [3.8, 3.9]
-    #steps:
-      #- uses: actions/checkout@v2
-      #- uses: actions-rs/toolchain@v1
-        #with:
-          #profile: minimal
-          #toolchain: stable
-          #default: true
-      #- uses: actions/setup-python@v2
-        #with:
-          #python-version: ${{ matrix.python-version }}
-      #- name: Build Wheels
-        #uses: messense/maturin-action@v1
-        #with:
-          #target: x86_64
-          #manylinux: auto
-          ##args: -i python${{ matrix.python-version }} --release --out dist --no-sdist
-          #args: --release --out dist
-      #- name: Upload Wheels Artifacts
-        #uses: actions/upload-artifact@v2
-        #with:
-          #name: wheels
-          #path: dist
+  build_for_linux:
+    name: Build for Linux
+    needs: [check, fmt, clippy]
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: [3.6, 3.7, 3.8, 3.9]
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions/setup-python@v2
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install Rust Toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: stable
+          default: true
+      - name: Build Wheels
+        uses: messense/maturin-action@v1
+        with:
+          target: x86_64
+          manylinux: auto
+          #args: -i python${{ matrix.python-version }} --release --out dist --no-sdist
+          args: --release --out dist
+      - name: Upload Wheels Artifacts
+        uses: actions/upload-artifact@v2
+        with:
+          name: wheels
+          path: dist
 
-  #build_for_windows:
-    #name: Build for Windows
-    ##TODO disabled for faster testing
-    ##needs: [check, fmt, clippy]
-    #runs-on: windows-latest
-    #strategy:
-      #matrix:
-        ##python-version: [3.6, 3.7, 3.8, 3.9]
-        #python-version: [3.8, 3.9]
-    #steps:
-      #- uses: actions/checkout@v2
-      #- uses: actions/setup-python@v2
-        #with:
-          #python-version: ${{ matrix.python-version }}
-          #architecture: x64
-      #- uses: actions-rs/toolchain@v1
-        #with:
-          #profile: minimal
-          #toolchain: stable
-          #default: true
-      #- name: Build Wheels
-        #uses: messense/maturin-action@v1
-        #with:
-          #target: x64
-          #args: --release --out dist
-      #- name: Upload Wheels Artifacts
-        #uses: actions/upload-artifact@v2
-        #with:
-          #name: wheels
-          #path: dist
+  build_for_windows:
+    name: Build for Windows
+    needs: [check, fmt, clippy]
+    runs-on: windows-latest
+    strategy:
+      matrix:
+        python-version: [3.6, 3.7, 3.8, 3.9]
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions/setup-python@v2
+        with:
+          python-version: ${{ matrix.python-version }}
+          architecture: x64
+      - name: Install Rust Toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: stable
+          default: true
+      - name: Build Wheels
+        uses: messense/maturin-action@v1
+        with:
+          target: x64
+          args: --release --out dist
+      - name: Upload Wheels Artifacts
+        uses: actions/upload-artifact@v2
+        with:
+          name: wheels
+          path: dist
 
   build_for_macos:
     name: Build for MacOS
-    #TODO disabled for faster testing
-    #needs: [check, fmt, clippy]
+    needs: [check, fmt, clippy]
     runs-on: macos-latest
     strategy:
       matrix:
-        #python-version: [3.6, 3.7, 3.8, 3.9]
-        python-version: [3.8, 3.9]
+        python-version: [3.6, 3.7, 3.8, 3.9]
     steps:
       - uses: actions/checkout@v2
       - uses: actions/setup-python@v2
@@ -156,7 +152,7 @@ jobs:
 
   publish_on_pypi:
     name: Publish
-    needs: build_for_macos
+    needs: [build_for_linux, build_for_macos, build_for_windows]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/download-artifact@v2
@@ -166,32 +162,21 @@ jobs:
         with:
           python-version: 3.9
       - name: Publish on TestPyPI
+        if: github.ref == 'refs/head/main'
         env:
           TWINE_USERNAME: LSchueler
           TWINE_PASSWORD: ${{ secrets.TEST_PYPI_PASSWORD }}
         run: |
           pip install --upgrade twine
           twine upload --repository testpypi --skip-existing *
-
-  #publish_on_pypi:
-    #name: Publish
-    #needs: build_for_macos
-    #runs-on: ubuntu-latest
-    #steps:
-      #- uses: actions/download-artifact@v2
-        #with:
-          #name: wheels
-          #path: dist
-      #- uses: actions/setup-python@v2
-        #with:
-          #python-version: 3.9
-      #- name: Publish on TestPyPI
-        #uses: pypa/gh-action-pypi-publish@release/v1
-        #with:
-          #user: LSchueler
-          #password: ${{ secrets.test_pypi_password }}
-          #repository_url: https://test.pypi.org/legacy/
-          ##skip_existing: true
+      - name: Publish on PyPI
+        if: startsWith(github.ref, 'refs/tags')
+        env:
+          TWINE_USERNAME: LSchueler
+          TWINE_PASSWORD: ${{ secrets.PYPI_PASSWORD }}
+        run: |
+          pip install --upgrade twine
+          twine upload --skip-existing *
 
   #publish_on_pypi:
     #name: Publish
@@ -208,7 +193,7 @@ jobs:
         #with:
           #user: LSchueler
           #password: ${{ secrets.test_pypi_password }}
-          #repository_url: https://test.pypi.org/legacy/
+          #repository_url: https://test.pypi.org/simple/
           #skip_existing: true
       #- name: Publish on PyPI
         #if: startsWith(github.ref, 'refs/tags')
