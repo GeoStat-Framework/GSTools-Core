@@ -11,7 +11,10 @@ license = "LGPL-3.0-or-later"
 
 [lib]
 name = "gstools_core"
-crate-type = ["cdylib"]
+crate-type = ["cdylib", "rlib"]
+
+[profile.bench]
+debug = true
 
 [dependencies]
 numpy = "0.14.1"
@@ -24,3 +27,11 @@ features = ["rayon"]
 [dependencies.pyo3]
 version = "0.14.3"
 features = ["extension-module"]
+
+[dev-dependencies.criterion]
+version = "0.3.5"
+features = ["html_reports"]
+
+[[bench]]
+name = "field_summate"
+harness = false

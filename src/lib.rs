@@ -7,9 +7,9 @@ use variogram::{
     variogram_directional, variogram_ma_structured, variogram_structured, variogram_unstructured,
 };
 
-mod field;
-mod krige;
-mod variogram;
+pub mod field;
+pub mod krige;
+pub mod variogram;
 
 #[pymodule]
 #[allow(non_snake_case)]
