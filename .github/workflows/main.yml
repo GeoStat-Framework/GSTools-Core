@@ -23,45 +23,19 @@ jobs:
           profile: minimal
           toolchain: stable
           override: true
-      - uses: actions-rs/cargo@v1
-        with:
-          command: check
-
-  fmt:
-    name: Rustfmt
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v2
-      - uses: actions-rs/toolchain@v1
-        with:
-          profile: minimal
-          toolchain: stable
-          override: true
-      - run: rustup component add rustfmt
+          components: rustfmt, clippy
       - uses: actions-rs/cargo@v1
         with:
           command: fmt
           args: --all -- --check
-
-  clippy:
-    name: Clippy
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v2
-      - uses: actions-rs/toolchain@v1
-        with:
-          profile: minimal
-          toolchain: stable
-          override: true
-      - run: rustup component add clippy
       - uses: actions-rs/cargo@v1
         with:
           command: clippy
-          args: -- -D warnings
+          args: -- --deny warnings
 
   build_for_linux:
     name: Build for Linux
-    needs: [check, fmt, clippy]
+    needs: [check]
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -92,7 +66,7 @@ jobs:
 
   build_for_windows:
     name: Build for Windows
-    needs: [check, fmt, clippy]
+    needs: [check]
     runs-on: windows-latest
     strategy:
       matrix:
@@ -122,7 +96,7 @@ jobs:
 
   build_for_macos:
     name: Build for MacOS
-    needs: [check, fmt, clippy]
+    needs: [check]
     runs-on: macos-latest
     strategy:
       matrix:
@@ -204,7 +178,7 @@ jobs:
 
   #This will probably never be needed, but who knows...
   #publish_on_crates:
-    #needs: [check, fmt, clippy]
+    #needs: [check]
     #runs-on: ubuntu-latest
     #steps:
       #- uses: actions/checkout@v2
