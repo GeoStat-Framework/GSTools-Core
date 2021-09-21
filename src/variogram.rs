@@ -6,6 +6,23 @@ trait Estimator {
     fn normalize_vec(variogram: &mut Array2<f64>, counts: &Array2<u64>);
 }
 
+macro_rules! choose_estimator {
+    ( $estimator_type:expr => $estimator:ident: $code:block ) => {
+        match $estimator_type {
+            'c' => {
+                type $estimator = Cressie;
+
+                $code
+            }
+            _ => {
+                type $estimator = Matheron;
+
+                $code
+            }
+        }
+    };
+}
+
 struct Matheron;
 
 impl Estimator for Matheron {
@@ -73,6 +90,23 @@ trait Distance {
     fn dist(dim: usize, pos: ArrayView2<f64>, i: usize, j: usize) -> f64;
 }
 
+macro_rules! choose_distance {
+    ( $distance_type:expr => $distance:ident: $code:block ) => {
+        match $distance_type {
+            'e' => {
+                type $distance = Euclid;
+
+                $code
+            }
+            _ => {
+                type $distance = Haversine;
+
+                $code
+            }
+        }
+    };
+}
+
 struct Euclid;
 
 impl Distance for Euclid {
@@ -127,10 +161,9 @@ pub fn variogram_structured(f: ArrayView2<'_, f64>, estimator_type: char) -> Arr
         variogram
     }
 
-    match estimator_type {
-        'c' => inner::<Cressie>(f),
-        _ => inner::<Matheron>(f),
-    }
+    choose_estimator!(estimator_type => E: {
+        inner::<E>(f)
+    })
 }
 
 pub fn variogram_ma_structured(
@@ -162,10 +195,9 @@ pub fn variogram_ma_structured(
         variogram
     }
 
-    match estimator_type {
-        'c' => inner::<Cressie>(f, mask),
-        _ => inner::<Matheron>(f, mask),
-    }
+    choose_estimator!(estimator_type => E: {
+        inner::<E>(f, mask)
+    })
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -290,8 +322,8 @@ pub fn variogram_directional(
         (variogram, counts)
     }
 
-    match estimator_type {
-        'c' => inner::<Cressie>(
+    choose_estimator!(estimator_type => E: {
+        inner::<E>(
             dim,
             f,
             bin_edges,
@@ -299,19 +331,9 @@ pub fn variogram_directional(
             direction,
             angles_tol,
             bandwidth,
-            separate_dirs,
-        ),
-        _ => inner::<Matheron>(
-            dim,
-            f,
-            bin_edges,
-            pos,
-            direction,
-            angles_tol,
-            bandwidth,
-            separate_dirs,
-        ),
-    }
+            separate_dirs
+        )
+    })
 }
 
 pub fn variogram_unstructured(
@@ -371,14 +393,9 @@ pub fn variogram_unstructured(
         (variogram, counts)
     }
 
-    match estimator_type {
-        'c' => match distance_type {
-            'e' => inner::<Cressie, Euclid>(dim, f, bin_edges, pos),
-            _ => inner::<Cressie, Haversine>(dim, f, bin_edges, pos),
-        },
-        _ => match distance_type {
-            'e' => inner::<Matheron, Euclid>(dim, f, bin_edges, pos),
-            _ => inner::<Matheron, Haversine>(dim, f, bin_edges, pos),
-        },
-    }
+    choose_estimator!(estimator_type => E: {
+        choose_distance!(distance_type => D: {
+            inner::<E, D>(dim, f, bin_edges, pos)
+        })
+    })
 }
