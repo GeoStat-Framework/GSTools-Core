@@ -1,102 +1,136 @@
 use ndarray::{Array1, Array2, ArrayView1, ArrayView2, Zip};
 
-fn choose_estimator_func(est_type: char) -> impl Fn(f64) -> f64 {
-    let estimator_matheron = |f_diff: f64| f_diff.powi(2);
-    let estimator_cressie = |f_diff: f64| f_diff.abs().sqrt();
+trait Estimator {
+    fn estimate(f_diff: f64) -> f64;
+    fn normalize(variogram: &mut Array1<f64>, counts: &Array1<u64>);
+    fn normalize_vec(variogram: &mut Array2<f64>, counts: &Array2<u64>);
+}
 
-    match est_type {
-        'm' => estimator_matheron,
-        'c' => estimator_cressie,
-        _ => estimator_matheron,
+struct Matheron;
+
+impl Estimator for Matheron {
+    fn estimate(f_diff: f64) -> f64 {
+        f_diff.powi(2)
     }
-}
 
-fn normalization_matheron(variogram: &mut Array1<f64>, counts: &Array1<u64>) {
-    Zip::from(variogram).and(counts).par_for_each(|v, c| {
-        let cf = if *c == 0 { 1.0 } else { *c as f64 };
-        *v /= 2.0 * cf;
-    });
-}
-
-fn normalization_cressie(variogram: &mut Array1<f64>, counts: &Array1<u64>) {
-    Zip::from(variogram).and(counts).par_for_each(|v, c| {
-        let cf = if *c == 0 { 1.0 } else { *c as f64 };
-        *v = 0.5 * (1. / cf * *v).powi(4) / (0.457 + 0.494 / cf + 0.045 / (cf * cf))
-    });
-}
-
-fn choose_normalization_func(est_type: char) -> impl Fn(&mut Array1<f64>, &Array1<u64>) {
-    match est_type {
-        'm' => normalization_matheron,
-        'c' => normalization_cressie,
-        _ => normalization_matheron,
+    fn normalize(variogram: &mut Array1<f64>, counts: &Array1<u64>) {
+        Zip::from(variogram).and(counts).par_for_each(|v, c| {
+            let cf = if *c == 0 { 1.0 } else { *c as f64 };
+            *v /= 2.0 * cf;
+        });
     }
-}
 
-fn normalization_matheron_vec(variogram: &mut Array2<f64>, counts: &Array2<u64>) {
-    for d in 0..variogram.shape()[0] {
-        //TODO get this to work
-        //normalization_matheron(&mut variogram.row_mut(d), &counts.row_mut(d));
+    fn normalize_vec(variogram: &mut Array2<f64>, counts: &Array2<u64>) {
+        for d in 0..variogram.shape()[0] {
+            //TODO get this to work
+            //normalization_matheron(&mut variogram.row_mut(d), &counts.row_mut(d));
 
-        for i in 0..variogram.shape()[1] {
-            let cf = if counts[[d, i]] == 0 {
-                1.0
-            } else {
-                counts[[d, i]] as f64
-            };
-            variogram[[d, i]] /= 2.0 * cf;
+            for i in 0..variogram.shape()[1] {
+                let cf = if counts[[d, i]] == 0 {
+                    1.0
+                } else {
+                    counts[[d, i]] as f64
+                };
+                variogram[[d, i]] /= 2.0 * cf;
+            }
         }
     }
 }
 
-fn normalization_cressie_vec(variogram: &mut Array2<f64>, counts: &Array2<u64>) {
-    for d in 0..variogram.shape()[0] {
-        //TODO get this to work
-        //normalization_cressie(&mut variogram.row_mut(d), &counts.row_mut(d));
+struct Cressie;
 
-        for i in 0..variogram.shape()[1] {
-            let cf = if counts[[d, i]] == 0 {
-                1.0
-            } else {
-                counts[[d, i]] as f64
-            };
-            variogram[[d, i]] = 0.5 * (1. / cf * variogram[[d, i]]).powi(4)
-                / (0.457 + 0.494 / cf + 0.045 / (cf * cf))
+impl Estimator for Cressie {
+    fn estimate(f_diff: f64) -> f64 {
+        f_diff.abs().sqrt()
+    }
+
+    fn normalize(variogram: &mut Array1<f64>, counts: &Array1<u64>) {
+        Zip::from(variogram).and(counts).par_for_each(|v, c| {
+            let cf = if *c == 0 { 1.0 } else { *c as f64 };
+            *v = 0.5 * (1. / cf * *v).powi(4) / (0.457 + 0.494 / cf + 0.045 / (cf * cf))
+        });
+    }
+
+    fn normalize_vec(variogram: &mut Array2<f64>, counts: &Array2<u64>) {
+        for d in 0..variogram.shape()[0] {
+            //TODO get this to work
+            //normalization_cressie(&mut variogram.row_mut(d), &counts.row_mut(d));
+
+            for i in 0..variogram.shape()[1] {
+                let cf = if counts[[d, i]] == 0 {
+                    1.0
+                } else {
+                    counts[[d, i]] as f64
+                };
+                variogram[[d, i]] = 0.5 * (1. / cf * variogram[[d, i]]).powi(4)
+                    / (0.457 + 0.494 / cf + 0.045 / (cf * cf))
+            }
         }
     }
 }
 
-fn choose_normalization_vec_func(est_type: char) -> impl Fn(&mut Array2<f64>, &Array2<u64>) {
-    match est_type {
-        'm' => normalization_matheron_vec,
-        'c' => normalization_cressie_vec,
-        _ => normalization_matheron_vec,
+trait Distance {
+    fn dist(dim: usize, pos: ArrayView2<f64>, i: usize, j: usize) -> f64;
+}
+
+struct Euclid;
+
+impl Distance for Euclid {
+    fn dist(dim: usize, pos: ArrayView2<f64>, i: usize, j: usize) -> f64 {
+        let mut dist_squared = 0.0;
+        (0..dim).into_iter().for_each(|d| {
+            dist_squared += (pos[[d, i]] - pos[[d, j]]).powi(2);
+        });
+
+        dist_squared.sqrt()
+    }
+}
+
+struct Haversine;
+
+impl Distance for Haversine {
+    fn dist(dim: usize, pos: ArrayView2<f64>, i: usize, j: usize) -> f64 {
+        assert!(dim == 2, "Haversine: dim = {} != 2", dim);
+
+        let deg_2_rad = std::f64::consts::PI / 180.0;
+        let diff_lat = (pos[[0, j]] - pos[[0, i]]) * deg_2_rad;
+        let diff_lon = (pos[[1, j]] - pos[[1, i]]) * deg_2_rad;
+        let arg = (diff_lat / 2.0).sin().powi(2)
+            + (pos[[0, i]] * deg_2_rad).cos()
+                * (pos[[0, j]] * deg_2_rad).cos()
+                * (diff_lon / 2.0).sin().powi(2);
+
+        2.0 * arg.sqrt().atan2((1.0 - arg).sqrt())
     }
 }
 
 pub fn variogram_structured(f: ArrayView2<'_, f64>, estimator_type: char) -> Array1<f64> {
-    let estimator_func = choose_estimator_func(estimator_type);
-    let normalization_func = choose_normalization_func(estimator_type);
+    fn inner<E: Estimator>(f: ArrayView2<'_, f64>) -> Array1<f64> {
+        let i_max = f.shape()[0] - 1;
+        let j_max = f.shape()[1];
+        let k_max = i_max + 1;
 
-    let i_max = f.shape()[0] - 1;
-    let j_max = f.shape()[1];
-    let k_max = i_max + 1;
+        let mut variogram = Array1::<f64>::zeros(k_max);
+        let mut counts = Array1::<u64>::zeros(k_max);
 
-    let mut variogram = Array1::<f64>::zeros(k_max);
-    let mut counts = Array1::<u64>::zeros(k_max);
-
-    (0..i_max).into_iter().for_each(|i| {
-        (0..j_max).into_iter().for_each(|j| {
-            (1..k_max - i).into_iter().for_each(|k| {
-                counts[k] += 1;
-                variogram[k] += estimator_func(f[[i, j]] - f[[i + k, j]]);
+        (0..i_max).into_iter().for_each(|i| {
+            (0..j_max).into_iter().for_each(|j| {
+                (1..k_max - i).into_iter().for_each(|k| {
+                    counts[k] += 1;
+                    variogram[k] += E::estimate(f[[i, j]] - f[[i + k, j]]);
+                });
             });
         });
-    });
 
-    normalization_func(&mut variogram, &counts);
+        E::normalize(&mut variogram, &counts);
 
-    variogram
+        variogram
+    }
+
+    match estimator_type {
+        'c' => inner::<Cressie>(f),
+        _ => inner::<Matheron>(f),
+    }
 }
 
 pub fn variogram_ma_structured(
@@ -104,57 +138,33 @@ pub fn variogram_ma_structured(
     mask: ArrayView2<'_, bool>,
     estimator_type: char,
 ) -> Array1<f64> {
-    let estimator_func = choose_estimator_func(estimator_type);
-    let normalization_func = choose_normalization_func(estimator_type);
+    fn inner<E: Estimator>(f: ArrayView2<'_, f64>, mask: ArrayView2<'_, bool>) -> Array1<f64> {
+        let i_max = f.shape()[0] - 1;
+        let j_max = f.shape()[1];
+        let k_max = i_max + 1;
 
-    let i_max = f.shape()[0] - 1;
-    let j_max = f.shape()[1];
-    let k_max = i_max + 1;
+        let mut variogram = Array1::<f64>::zeros(k_max);
+        let mut counts = Array1::<u64>::zeros(k_max);
 
-    let mut variogram = Array1::<f64>::zeros(k_max);
-    let mut counts = Array1::<u64>::zeros(k_max);
-
-    (0..i_max).into_iter().for_each(|i| {
-        (0..j_max).into_iter().for_each(|j| {
-            (1..k_max - i).into_iter().for_each(|k| {
-                if !mask[[i, j]] && !mask[[i + k, j]] {
-                    counts[k] += 1;
-                    variogram[k] += estimator_func(f[[i, j]] - f[[i + k, j]]);
-                }
+        (0..i_max).into_iter().for_each(|i| {
+            (0..j_max).into_iter().for_each(|j| {
+                (1..k_max - i).into_iter().for_each(|k| {
+                    if !mask[[i, j]] && !mask[[i + k, j]] {
+                        counts[k] += 1;
+                        variogram[k] += E::estimate(f[[i, j]] - f[[i + k, j]]);
+                    }
+                });
             });
         });
-    });
 
-    normalization_func(&mut variogram, &counts);
+        E::normalize(&mut variogram, &counts);
 
-    variogram
-}
+        variogram
+    }
 
-fn dist_euclid(dim: usize, pos: ArrayView2<f64>, i: usize, j: usize) -> f64 {
-    let mut dist_squared = 0.0;
-    (0..dim).into_iter().for_each(|d| {
-        dist_squared += (pos[[d, i]] - pos[[d, j]]).powi(2);
-    });
-
-    dist_squared.sqrt()
-}
-
-fn dist_haversine(_dim: usize, pos: ArrayView2<f64>, i: usize, j: usize) -> f64 {
-    let deg_2_rad = std::f64::consts::PI / 180.0;
-    let diff_lat = (pos[[0, j]] - pos[[0, i]]) * deg_2_rad;
-    let diff_lon = (pos[[1, j]] - pos[[1, i]]) * deg_2_rad;
-    let arg = (diff_lat / 2.0).sin().powi(2)
-        + (pos[[0, i]] * deg_2_rad).cos()
-            * (pos[[0, j]] * deg_2_rad).cos()
-            * (diff_lon / 2.0).sin().powi(2);
-
-    2.0 * arg.sqrt().atan2((1.0 - arg).sqrt())
-}
-
-fn choose_distance_func(dist_type: char) -> impl Fn(usize, ArrayView2<f64>, usize, usize) -> f64 {
-    match dist_type {
-        'e' => dist_euclid,
-        _ => dist_haversine,
+    match estimator_type {
+        'c' => inner::<Cressie>(f, mask),
+        _ => inner::<Matheron>(f, mask),
     }
 }
 
@@ -229,48 +239,79 @@ pub fn variogram_directional(
         "tolerance for angle search masks must be > 0",
     );
 
-    let estimator_func = choose_estimator_func(estimator_type);
-    let normalization_func = choose_normalization_vec_func(estimator_type);
+    fn inner<E: Estimator>(
+        dim: usize,
+        f: ArrayView2<'_, f64>,
+        bin_edges: ArrayView1<'_, f64>,
+        pos: ArrayView2<'_, f64>,
+        direction: ArrayView2<'_, f64>,
+        angles_tol: f64,
+        bandwidth: f64,
+        separate_dirs: bool,
+    ) -> (Array2<f64>, Array2<u64>) {
+        let d_max = direction.shape()[0];
+        let i_max = bin_edges.shape()[0] - 1;
+        let j_max = pos.shape()[1] - 1;
+        let k_max = pos.shape()[1];
+        let f_max = f.shape()[0];
 
-    let d_max = direction.shape()[0];
-    let i_max = bin_edges.shape()[0] - 1;
-    let j_max = pos.shape()[1] - 1;
-    let k_max = pos.shape()[1];
-    let f_max = f.shape()[0];
+        let mut variogram = Array2::<f64>::zeros((d_max, i_max));
+        let mut counts = Array2::<u64>::zeros((d_max, i_max));
 
-    let mut variogram = Array2::<f64>::zeros((d_max, i_max));
-    let mut counts = Array2::<u64>::zeros((d_max, i_max));
-
-    for i in 0..i_max {
-        for j in 0..j_max {
-            for k in j + 1..k_max {
-                let dist = dist_euclid(dim, pos, j, k);
-                if dist < bin_edges[i] || dist >= bin_edges[i + 1] {
-                    continue; //skip if not in current bin
-                }
-                for d in 0..d_max {
-                    if !dir_test(dim, pos, dist, direction, angles_tol, bandwidth, k, j, d) {
-                        continue;
+        for i in 0..i_max {
+            for j in 0..j_max {
+                for k in j + 1..k_max {
+                    let dist = Euclid::dist(dim, pos, j, k);
+                    if dist < bin_edges[i] || dist >= bin_edges[i + 1] {
+                        continue; //skip if not in current bin
                     }
-                    for m in 0..f_max {
-                        if !(f[[m, k]].is_nan() || f[[m, j]].is_nan()) {
-                            counts[[d, i]] += 1;
-                            variogram[[d, i]] += estimator_func(f[[m, k]] - f[[m, j]]);
+                    for d in 0..d_max {
+                        if !dir_test(dim, pos, dist, direction, angles_tol, bandwidth, k, j, d) {
+                            continue;
                         }
-                    }
-                    //once we found a fitting direction
-                    //break the search if directions are separated
-                    if separate_dirs {
-                        break;
+                        for m in 0..f_max {
+                            if !(f[[m, k]].is_nan() || f[[m, j]].is_nan()) {
+                                counts[[d, i]] += 1;
+                                variogram[[d, i]] += E::estimate(f[[m, k]] - f[[m, j]]);
+                            }
+                        }
+                        //once we found a fitting direction
+                        //break the search if directions are separated
+                        if separate_dirs {
+                            break;
+                        }
                     }
                 }
             }
         }
+
+        E::normalize_vec(&mut variogram, &counts);
+
+        (variogram, counts)
     }
 
-    normalization_func(&mut variogram, &counts);
-
-    (variogram, counts)
+    match estimator_type {
+        'c' => inner::<Cressie>(
+            dim,
+            f,
+            bin_edges,
+            pos,
+            direction,
+            angles_tol,
+            bandwidth,
+            separate_dirs,
+        ),
+        _ => inner::<Matheron>(
+            dim,
+            f,
+            bin_edges,
+            pos,
+            direction,
+            angles_tol,
+            bandwidth,
+            separate_dirs,
+        ),
+    }
 }
 
 pub fn variogram_unstructured(
@@ -293,40 +334,51 @@ pub fn variogram_unstructured(
         bin_edges.shape()[0]
     );
 
-    let estimator_func = choose_estimator_func(estimator_type);
-    let normalization_func = choose_normalization_func(estimator_type);
-    let distance_func = choose_distance_func(distance_type);
-    if distance_type == 'h' {
-        assert!(dim == 2, "Haversine: dim = {} != 2", dim);
-    }
+    fn inner<E: Estimator, D: Distance>(
+        dim: usize,
+        f: ArrayView2<'_, f64>,
+        bin_edges: ArrayView1<'_, f64>,
+        pos: ArrayView2<'_, f64>,
+    ) -> (Array1<f64>, Array1<u64>) {
+        let i_max = bin_edges.shape()[0] - 1;
+        let j_max = pos.shape()[1] - 1;
+        let k_max = pos.shape()[1];
+        let f_max = f.shape()[0];
 
-    let i_max = bin_edges.shape()[0] - 1;
-    let j_max = pos.shape()[1] - 1;
-    let k_max = pos.shape()[1];
-    let f_max = f.shape()[0];
+        let mut variogram = Array1::<f64>::zeros(i_max);
+        let mut counts = Array1::<u64>::zeros(i_max);
 
-    let mut variogram = Array1::<f64>::zeros(i_max);
-    let mut counts = Array1::<u64>::zeros(i_max);
-
-    for i in 0..i_max {
-        for j in 0..j_max {
-            for k in j + 1..k_max {
-                let dist = distance_func(dim, pos, j, k);
-                if dist < bin_edges[i] || dist >= bin_edges[i + 1] {
-                    continue; //skip if not in current bin
-                }
-                for m in 0..f_max {
-                    // skip no data values
-                    if !(f[[m, k]].is_nan() || f[[m, j]].is_nan()) {
-                        counts[i] += 1;
-                        variogram[i] += estimator_func(f[[m, k]] - f[[m, j]]);
+        for i in 0..i_max {
+            for j in 0..j_max {
+                for k in j + 1..k_max {
+                    let dist = D::dist(dim, pos, j, k);
+                    if dist < bin_edges[i] || dist >= bin_edges[i + 1] {
+                        continue; //skip if not in current bin
+                    }
+                    for m in 0..f_max {
+                        // skip no data values
+                        if !(f[[m, k]].is_nan() || f[[m, j]].is_nan()) {
+                            counts[i] += 1;
+                            variogram[i] += E::estimate(f[[m, k]] - f[[m, j]]);
+                        }
                     }
                 }
             }
         }
+
+        E::normalize(&mut variogram, &counts);
+
+        (variogram, counts)
     }
 
-    normalization_func(&mut variogram, &counts);
-
-    (variogram, counts)
+    match estimator_type {
+        'c' => match distance_type {
+            'e' => inner::<Cressie, Euclid>(dim, f, bin_edges, pos),
+            _ => inner::<Cressie, Haversine>(dim, f, bin_edges, pos),
+        },
+        _ => match distance_type {
+            'e' => inner::<Matheron, Euclid>(dim, f, bin_edges, pos),
+            _ => inner::<Matheron, Haversine>(dim, f, bin_edges, pos),
+        },
+    }
 }
