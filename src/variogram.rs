@@ -1,9 +1,16 @@
-use ndarray::{Array1, Array2, ArrayView1, ArrayView2, Zip};
+use ndarray::{Array1, Array2, ArrayView1, ArrayView2, ArrayViewMut1, ArrayViewMut2, Zip};
 
 trait Estimator {
     fn estimate(f_diff: f64) -> f64;
-    fn normalize(variogram: &mut Array1<f64>, counts: &Array1<u64>);
-    fn normalize_vec(variogram: &mut Array2<f64>, counts: &Array2<u64>);
+    fn normalize(variogram: ArrayViewMut1<f64>, counts: ArrayView1<u64>);
+
+    fn normalize_vec(mut variogram: ArrayViewMut2<f64>, counts: ArrayView2<u64>) {
+        Zip::from(variogram.rows_mut())
+            .and(counts.rows())
+            .par_for_each(|variogram, counts| {
+                Self::normalize(variogram, counts);
+            });
+    }
 }
 
 macro_rules! choose_estimator {
@@ -30,27 +37,11 @@ impl Estimator for Matheron {
         f_diff.powi(2)
     }
 
-    fn normalize(variogram: &mut Array1<f64>, counts: &Array1<u64>) {
+    fn normalize(variogram: ArrayViewMut1<f64>, counts: ArrayView1<u64>) {
         Zip::from(variogram).and(counts).par_for_each(|v, c| {
             let cf = if *c == 0 { 1.0 } else { *c as f64 };
             *v /= 2.0 * cf;
         });
-    }
-
-    fn normalize_vec(variogram: &mut Array2<f64>, counts: &Array2<u64>) {
-        for d in 0..variogram.shape()[0] {
-            //TODO get this to work
-            //normalization_matheron(&mut variogram.row_mut(d), &counts.row_mut(d));
-
-            for i in 0..variogram.shape()[1] {
-                let cf = if counts[[d, i]] == 0 {
-                    1.0
-                } else {
-                    counts[[d, i]] as f64
-                };
-                variogram[[d, i]] /= 2.0 * cf;
-            }
-        }
     }
 }
 
@@ -61,28 +52,11 @@ impl Estimator for Cressie {
         f_diff.abs().sqrt()
     }
 
-    fn normalize(variogram: &mut Array1<f64>, counts: &Array1<u64>) {
+    fn normalize(variogram: ArrayViewMut1<f64>, counts: ArrayView1<u64>) {
         Zip::from(variogram).and(counts).par_for_each(|v, c| {
             let cf = if *c == 0 { 1.0 } else { *c as f64 };
             *v = 0.5 * (1. / cf * *v).powi(4) / (0.457 + 0.494 / cf + 0.045 / (cf * cf))
         });
-    }
-
-    fn normalize_vec(variogram: &mut Array2<f64>, counts: &Array2<u64>) {
-        for d in 0..variogram.shape()[0] {
-            //TODO get this to work
-            //normalization_cressie(&mut variogram.row_mut(d), &counts.row_mut(d));
-
-            for i in 0..variogram.shape()[1] {
-                let cf = if counts[[d, i]] == 0 {
-                    1.0
-                } else {
-                    counts[[d, i]] as f64
-                };
-                variogram[[d, i]] = 0.5 * (1. / cf * variogram[[d, i]]).powi(4)
-                    / (0.457 + 0.494 / cf + 0.045 / (cf * cf))
-            }
-        }
     }
 }
 
@@ -154,7 +128,7 @@ pub fn variogram_structured(f: ArrayView2<'_, f64>, estimator_type: char) -> Arr
             });
         });
 
-        E::normalize(&mut variogram, &counts);
+        E::normalize(variogram.view_mut(), counts.view());
 
         variogram
     }
@@ -188,7 +162,7 @@ pub fn variogram_ma_structured(
             });
         });
 
-        E::normalize(&mut variogram, &counts);
+        E::normalize(variogram.view_mut(), counts.view());
 
         variogram
     }
@@ -315,7 +289,7 @@ pub fn variogram_directional(
             }
         }
 
-        E::normalize_vec(&mut variogram, &counts);
+        E::normalize_vec(variogram.view_mut(), counts.view());
 
         (variogram, counts)
     }
@@ -386,7 +360,7 @@ pub fn variogram_unstructured(
             }
         }
 
-        E::normalize(&mut variogram, &counts);
+        E::normalize(variogram.view_mut(), counts.view());
 
         (variogram, counts)
     }
