@@ -111,12 +111,10 @@ struct Euclid;
 
 impl Distance for Euclid {
     fn dist(dim: usize, pos: ArrayView2<f64>, i: usize, j: usize) -> f64 {
-        let mut dist_squared = 0.0;
-        (0..dim).into_iter().for_each(|d| {
-            dist_squared += (pos[[d, i]] - pos[[d, j]]).powi(2);
-        });
-
-        dist_squared.sqrt()
+        (0..dim)
+            .map(|d| (pos[[d, i]] - pos[[d, j]]).powi(2))
+            .sum::<f64>()
+            .sqrt()
     }
 }
 
@@ -126,12 +124,12 @@ impl Distance for Haversine {
     fn dist(dim: usize, pos: ArrayView2<f64>, i: usize, j: usize) -> f64 {
         assert!(dim == 2, "Haversine: dim = {} != 2", dim);
 
-        let deg_2_rad = std::f64::consts::PI / 180.0;
-        let diff_lat = (pos[[0, j]] - pos[[0, i]]) * deg_2_rad;
-        let diff_lon = (pos[[1, j]] - pos[[1, i]]) * deg_2_rad;
+        let diff_lat = (pos[[0, j]] - pos[[0, i]]).to_radians();
+        let diff_lon = (pos[[1, j]] - pos[[1, i]]).to_radians();
+
         let arg = (diff_lat / 2.0).sin().powi(2)
-            + (pos[[0, i]] * deg_2_rad).cos()
-                * (pos[[0, j]] * deg_2_rad).cos()
+            + (pos[[0, i]].to_radians()).cos()
+                * (pos[[0, j]].to_radians()).cos()
                 * (diff_lon / 2.0).sin().powi(2);
 
         2.0 * arg.sqrt().atan2((1.0 - arg).sqrt())
