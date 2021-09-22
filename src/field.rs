@@ -89,6 +89,8 @@ pub fn summator_incompr(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    use approx::assert_ulps_eq;
     use ndarray::{arr1, arr2};
 
     struct Setup {
@@ -155,7 +157,7 @@ mod tests {
     fn test_summate_incompr_3d() {
         let setup = Setup::new();
 
-        assert_eq!(
+        assert_ulps_eq!(
             summator_incompr(
                 setup.cov_samples.view(),
                 setup.z_1.view(),
@@ -193,7 +195,8 @@ mod tests {
                     -0.0656185245433833,
                     1.6593799470196355
                 ]
-            ])
+            ]),
+            max_ulps = 6
         );
     }
 }
