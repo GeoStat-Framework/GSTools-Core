@@ -62,12 +62,13 @@ pub fn summator_incompr(
                         let k_2 = cov_samples.dot(&cov_samples);
                         let phase = cov_samples.dot(&pos);
 
-                        Zip::from(&mut sum).and(&e1).and(cov_samples).par_for_each(
-                            |sum, e1, cs| {
+                        Zip::from(&mut sum)
+                            .and(&e1)
+                            .and(cov_samples)
+                            .for_each(|sum, e1, cs| {
                                 let proj = *e1 - cs * cov_samples[0] / k_2;
                                 *sum += proj * (z1 * phase.cos() + z2 * phase.sin());
-                            },
-                        );
+                            });
 
                         sum
                     },
