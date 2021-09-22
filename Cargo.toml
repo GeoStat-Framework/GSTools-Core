@@ -13,8 +13,15 @@ license = "LGPL-3.0-or-later"
 name = "gstools_core"
 crate-type = ["cdylib", "rlib"]
 
+[profile.release]
+panic = "abort"
+lto = true
+codegen-units = 1
+
 [profile.bench]
 debug = true
+lto = true
+codegen-units = 1
 
 [dependencies]
 numpy = "0.14.1"
