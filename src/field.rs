@@ -56,15 +56,8 @@ pub fn summator_incompr(
 
     (0..pos.shape()[1]).into_iter().for_each(|i| {
         (0..cov_samples.shape()[1]).into_iter().for_each(|j| {
-            let k_2 = cov_samples
-                .slice(s![.., j])
-                .dot(&cov_samples.slice(s![.., j]));
-            let phase: f64 = cov_samples
-                .slice(s![.., j])
-                .iter()
-                .zip(pos.slice(s![.., i]))
-                .map(|(s, p)| s * p)
-                .sum();
+            let k_2 = cov_samples.column(j).dot(&cov_samples.column(j));
+            let phase = cov_samples.column(j).dot(&pos.column(i));
             (0..dim).into_iter().for_each(|d| {
                 proj[d] = e1[d] - cov_samples[[d, j]] * cov_samples[[0, j]] / k_2;
             });
