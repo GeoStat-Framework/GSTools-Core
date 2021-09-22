@@ -1,4 +1,4 @@
-use ndarray::{s, Array1, Array2, ArrayView1, ArrayView2, Zip};
+use ndarray::{Array1, Array2, ArrayView1, ArrayView2, Zip};
 
 //#[macro_use]
 //use this for into_par_iter
@@ -50,22 +50,27 @@ pub fn summator_incompr(
     // unit vector in x dir.
     let mut e1 = Array1::<f64>::zeros(dim);
     e1[0] = 1.0;
-    let e1 = e1;
 
-    let mut proj = Array1::<f64>::default(dim);
+    Zip::from(pos.columns())
+        .and(summed_modes.columns_mut())
+        .for_each(|pos, mut summed_modes| {
+            Zip::from(cov_samples.columns())
+                .and(z1)
+                .and(z2)
+                .for_each(|cov_samples, z1, z2| {
+                    let k_2 = cov_samples.dot(&cov_samples);
+                    let phase = cov_samples.dot(&pos);
 
-    (0..pos.shape()[1]).into_iter().for_each(|i| {
-        (0..cov_samples.shape()[1]).into_iter().for_each(|j| {
-            let k_2 = cov_samples.column(j).dot(&cov_samples.column(j));
-            let phase = cov_samples.column(j).dot(&pos.column(i));
-            (0..dim).into_iter().for_each(|d| {
-                proj[d] = e1[d] - cov_samples[[d, j]] * cov_samples[[0, j]] / k_2;
-            });
-            (0..dim).into_iter().for_each(|d| {
-                summed_modes[[d, i]] += proj[d] * (z1[j] * phase.cos() + z2[j] * phase.sin());
-            });
+                    Zip::from(&mut summed_modes)
+                        .and(&e1)
+                        .and(cov_samples)
+                        .for_each(|summed_modes, e1, cs| {
+                            let proj = *e1 - cs * cov_samples[0] / k_2;
+                            *summed_modes += proj * (z1 * phase.cos() + z2 * phase.sin());
+                        });
+                });
         });
-    });
+
     summed_modes
 }
 
