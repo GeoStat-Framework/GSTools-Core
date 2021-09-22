@@ -1,8 +1,6 @@
 use ndarray::{Array1, Array2, ArrayView1, ArrayView2, Zip};
 
-//#[macro_use]
-//use this for into_par_iter
-//use rayon::prelude::*;
+use rayon::prelude::*;
 
 pub fn summator(
     cov_samples: ArrayView2<'_, f64>,
@@ -45,7 +43,7 @@ pub fn summator_incompr(
 
     let dim = pos.shape()[0];
 
-    let mut summed_modes = Array2::<f64>::zeros(pos.raw_dim());
+    let mut summed_modes = Array2::<f64>::zeros(pos.dim());
 
     // unit vector in x dir.
     let mut e1 = Array1::<f64>::zeros(dim);
@@ -53,22 +51,36 @@ pub fn summator_incompr(
 
     Zip::from(pos.columns())
         .and(summed_modes.columns_mut())
-        .for_each(|pos, mut summed_modes| {
-            Zip::from(cov_samples.columns())
+        .par_for_each(|pos, mut summed_modes| {
+            let sum = Zip::from(cov_samples.columns())
                 .and(z1)
                 .and(z2)
-                .for_each(|cov_samples, z1, z2| {
-                    let k_2 = cov_samples.dot(&cov_samples);
-                    let phase = cov_samples.dot(&pos);
+                .into_par_iter()
+                .fold(
+                    || Array1::<f64>::zeros(dim),
+                    |mut sum, (cov_samples, z1, z2)| {
+                        let k_2 = cov_samples.dot(&cov_samples);
+                        let phase = cov_samples.dot(&pos);
 
-                    Zip::from(&mut summed_modes)
-                        .and(&e1)
-                        .and(cov_samples)
-                        .for_each(|summed_modes, e1, cs| {
-                            let proj = *e1 - cs * cov_samples[0] / k_2;
-                            *summed_modes += proj * (z1 * phase.cos() + z2 * phase.sin());
-                        });
-                });
+                        Zip::from(&mut sum).and(&e1).and(cov_samples).par_for_each(
+                            |sum, e1, cs| {
+                                let proj = *e1 - cs * cov_samples[0] / k_2;
+                                *sum += proj * (z1 * phase.cos() + z2 * phase.sin());
+                            },
+                        );
+
+                        sum
+                    },
+                )
+                .reduce(
+                    || Array1::<f64>::zeros(dim),
+                    |mut lhs, rhs| {
+                        lhs += &rhs;
+                        lhs
+                    },
+                );
+
+            summed_modes.assign(&sum);
         });
 
     summed_modes
