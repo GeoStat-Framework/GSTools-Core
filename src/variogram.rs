@@ -371,3 +371,194 @@ pub fn variogram_unstructured(
         })
     })
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    use approx::assert_ulps_eq;
+    use ndarray::{arr1, arr2, stack, Axis};
+
+    struct SetupStruct {
+        field: Array2<f64>,
+    }
+
+    impl SetupStruct {
+        fn new() -> Self {
+            Self {
+                field: arr2(&[
+                    [41.2],
+                    [40.2],
+                    [39.7],
+                    [39.2],
+                    [40.1],
+                    [38.3],
+                    [39.1],
+                    [40.0],
+                    [41.1],
+                    [40.3],
+                ]),
+            }
+        }
+    }
+
+    #[test]
+    fn test_variogram_struct() {
+        let setup = SetupStruct::new();
+
+        assert_ulps_eq!(
+            variogram_structured(setup.field.view(), 'm'),
+            arr1(&[
+                0.0,
+                0.49166666666666814,
+                0.7625000000000011,
+                1.090714285714288,
+                0.9016666666666685,
+                1.3360000000000025,
+                0.9524999999999989,
+                0.4349999999999996,
+                0.004999999999999788,
+                0.40500000000000513
+            ]),
+            max_ulps = 6
+        );
+    }
+
+    #[test]
+    fn test_variogram_ma_struct() {
+        let setup = SetupStruct::new();
+        let mask1 = arr2(&[
+            [false],
+            [false],
+            [false],
+            [false],
+            [false],
+            [false],
+            [false],
+            [false],
+            [false],
+            [false],
+        ]);
+        let mask2 = arr2(&[
+            [true],
+            [false],
+            [false],
+            [false],
+            [false],
+            [false],
+            [false],
+            [false],
+            [false],
+            [false],
+        ]);
+
+        assert_ulps_eq!(
+            variogram_ma_structured(setup.field.view(), mask1.view(), 'm'),
+            arr1(&[
+                0.0,
+                0.49166666666666814,
+                0.7625000000000011,
+                1.090714285714288,
+                0.9016666666666685,
+                1.3360000000000025,
+                0.9524999999999989,
+                0.4349999999999996,
+                0.004999999999999788,
+                0.40500000000000513
+            ]),
+            max_ulps = 6
+        );
+        assert_ulps_eq!(
+            variogram_ma_structured(setup.field.view(), mask2.view(), 'm'),
+            arr1(&[
+                0.0,
+                0.4906250000000017,
+                0.710714285714287,
+                0.9391666666666693,
+                0.9610000000000019,
+                0.6187499999999992,
+                0.5349999999999975,
+                0.29249999999999765,
+                0.004999999999999432,
+                0.0
+            ]),
+            max_ulps = 6
+        );
+    }
+
+    struct SetupUnstruct {
+        pos: Array2<f64>,
+        field: Array2<f64>,
+        bin_edges: Array1<f64>,
+    }
+
+    impl SetupUnstruct {
+        fn new() -> Self {
+            Self {
+                pos: stack![
+                    Axis(0),
+                    Array1::range(0., 10., 1.),
+                    Array1::range(0., 10., 1.)
+                ],
+                field: arr2(&[[
+                    -1.2427955,
+                    -0.59811704,
+                    -0.57745039,
+                    0.01531904,
+                    -0.26474262,
+                    -0.53626347,
+                    -0.85106795,
+                    -1.96939178,
+                    -1.83650493,
+                    -1.23548617,
+                ]]),
+                bin_edges: Array1::linspace(0., 5., 4),
+            }
+        }
+    }
+
+    #[test]
+    fn test_variogram_unstruct() {
+        let setup = SetupUnstruct::new();
+        let (gamma, cnts) = variogram_unstructured(
+            2,
+            setup.field.view(),
+            setup.bin_edges.view(),
+            setup.pos.view(),
+            'm',
+            'e',
+        );
+        assert_ulps_eq!(
+            gamma,
+            arr1(&[0.14712242466045536, 0.320522186616688, 0.5136105328106929]),
+            max_ulps = 6,
+        );
+        assert_eq!(cnts, arr1(&[9, 8, 7]),);
+    }
+
+    #[test]
+    fn test_variogram_directional() {
+        let setup = SetupUnstruct::new();
+        let direction = arr2(&[[0., std::f64::consts::PI], [0., 0.]]);
+        let (gamma, cnts) = variogram_directional(
+            2,
+            setup.field.view(),
+            setup.bin_edges.view(),
+            setup.pos.view(),
+            direction.view(),
+            std::f64::consts::PI / 8.,
+            -1.0,
+            false,
+            'm',
+        );
+        assert_ulps_eq!(
+            gamma,
+            arr2(&[
+                [0.14712242466045536, 0.320522186616688, 0.5136105328106929],
+                [0., 0., 0.]
+            ]),
+            max_ulps = 6,
+        );
+        assert_eq!(cnts, arr2(&[[9, 8, 7], [0, 0, 0]]),);
+    }
+}
