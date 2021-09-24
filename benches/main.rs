@@ -1,5 +1,6 @@
 use criterion::{criterion_group, criterion_main, Criterion};
 use gstools_core::field::{summator, summator_incompr};
+use gstools_core::krige::{calculator_field_krige, calculator_field_krige_and_variance};
 use ndarray::{stack, Array1, Array2, Axis};
 use std::fs::File;
 use std::io::{BufRead, BufReader};
@@ -36,7 +37,7 @@ fn read_2d_from_file(file_path: &Path) -> Array2<f64> {
     Array2::from_shape_vec(shape, flat_vec).unwrap()
 }
 
-pub fn criterion_benchmark(c: &mut Criterion) {
+pub fn field_benchmark(c: &mut Criterion) {
     let path = Path::new("benches/input");
 
     let x = read_1d_from_file(&path.join("field_bench_x.txt"));
@@ -59,5 +60,23 @@ pub fn criterion_benchmark(c: &mut Criterion) {
     });
 }
 
-criterion_group!(benches, criterion_benchmark);
+pub fn krige_benchmark(c: &mut Criterion) {
+    let path = Path::new("benches/input");
+
+    let krige_mat = read_2d_from_file(&path.join("krige_bench_krige_mat.txt"));
+    let k_vec = read_2d_from_file(&path.join("krige_bench_k_vec.txt"));
+    let krige_cond = read_1d_from_file(&path.join("krige_bench_krige_cond.txt"));
+
+    c.bench_function("krige error", |b| {
+        b.iter(|| {
+            calculator_field_krige_and_variance(krige_mat.view(), k_vec.view(), krige_cond.view())
+        })
+    });
+
+    c.bench_function("krige", |b| {
+        b.iter(|| calculator_field_krige(krige_mat.view(), k_vec.view(), krige_cond.view()))
+    });
+}
+
+criterion_group!(benches, field_benchmark, krige_benchmark);
 criterion_main!(benches);

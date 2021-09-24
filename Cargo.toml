@@ -43,5 +43,5 @@ version = "0.3.5"
 features = ["html_reports"]
 
 [[bench]]
-name = "field_summate"
+name = "main"
 harness = false
