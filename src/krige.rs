@@ -1,4 +1,4 @@
-use ndarray::{Array1, ArrayView1, ArrayView2};
+use ndarray::{Array1, ArrayView1, ArrayView2, Zip};
 
 pub fn calculator_field_krige_and_variance(
     krig_mat: ArrayView2<'_, f64>,
@@ -15,9 +15,11 @@ pub fn calculator_field_krige_and_variance(
     (0..res_i).into_iter().for_each(|k| {
         (0..mat_i).into_iter().for_each(|i| {
             let mut krig_fac = 0.0;
-            (0..mat_i).into_iter().for_each(|j| {
-                krig_fac += krig_mat[[i, j]] * krig_vecs[[j, k]];
-            });
+            Zip::from(krig_mat.rows())
+                .and(krig_vecs.rows())
+                .for_each(|mat_row, vec_row| {
+                    krig_fac += mat_row[i] * vec_row[k];
+                });
             error[k] += krig_vecs[[i, k]] * krig_fac;
             field[k] += cond[i] * krig_fac;
         });
@@ -40,9 +42,11 @@ pub fn calculator_field_krige(
     (0..res_i).into_iter().for_each(|k| {
         (0..mat_i).into_iter().for_each(|i| {
             let mut krig_fac = 0.0;
-            (0..mat_i).into_iter().for_each(|j| {
-                krig_fac += krig_mat[[i, j]] * krig_vecs[[j, k]];
-            });
+            Zip::from(krig_mat.rows())
+                .and(krig_vecs.rows())
+                .for_each(|mat_row, vec_row| {
+                    krig_fac += mat_row[i] * vec_row[k];
+                });
             field[k] += cond[i] * krig_fac;
         });
     });
