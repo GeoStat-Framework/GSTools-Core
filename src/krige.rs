@@ -5,25 +5,29 @@ pub fn calculator_field_krige_and_variance(
     krig_vecs: ArrayView2<'_, f64>,
     cond: ArrayView1<'_, f64>,
 ) -> (Array1<f64>, Array1<f64>) {
-    let mat_i = krig_mat.shape()[0];
-    let res_i = krig_vecs.shape()[1];
+    assert!(krig_mat.shape()[0] == krig_mat.shape()[1]);
+    assert!(krig_mat.shape()[0] == krig_vecs.shape()[0]);
+    assert!(krig_mat.shape()[0] == cond.shape()[0]);
 
-    let mut field = Array1::<f64>::zeros(res_i);
-    let mut error = Array1::<f64>::zeros(res_i);
+    let mut field = Array1::<f64>::zeros(krig_vecs.shape()[1]);
+    let mut error = Array1::<f64>::zeros(krig_vecs.shape()[1]);
 
-    //TODO make parallel
-    (0..res_i).into_iter().for_each(|k| {
-        (0..mat_i).into_iter().for_each(|i| {
-            let mut krig_fac = 0.0;
-            Zip::from(krig_mat.rows())
-                .and(krig_vecs.rows())
-                .for_each(|mat_row, vec_row| {
-                    krig_fac += mat_row[i] * vec_row[k];
+    Zip::from(field.view_mut())
+        .and(error.view_mut())
+        .and(krig_vecs.columns())
+        .par_for_each(|f, e, v_col| {
+            Zip::from(cond)
+                .and(v_col)
+                .and(krig_mat.columns())
+                .for_each(|c, v, m_row| {
+                    let mut krig_fac = 0.0;
+                    Zip::from(m_row).and(v_col).for_each(|m, v| {
+                        krig_fac += m * v;
+                    });
+                    *e += v * krig_fac;
+                    *f += c * krig_fac;
                 });
-            error[k] += krig_vecs[[i, k]] * krig_fac;
-            field[k] += cond[i] * krig_fac;
         });
-    });
 
     (field, error)
 }
@@ -33,23 +37,25 @@ pub fn calculator_field_krige(
     krig_vecs: ArrayView2<'_, f64>,
     cond: ArrayView1<'_, f64>,
 ) -> Array1<f64> {
-    let mat_i = krig_mat.shape()[0];
-    let res_i = krig_vecs.shape()[1];
+    assert!(krig_mat.shape()[0] == krig_mat.shape()[1]);
+    assert!(krig_mat.shape()[0] == krig_vecs.shape()[0]);
+    assert!(krig_mat.shape()[0] == cond.shape()[0]);
 
-    let mut field = Array1::<f64>::zeros(res_i);
+    let mut field = Array1::<f64>::zeros(krig_vecs.shape()[1]);
 
-    //TODO make parallel
-    (0..res_i).into_iter().for_each(|k| {
-        (0..mat_i).into_iter().for_each(|i| {
-            let mut krig_fac = 0.0;
-            Zip::from(krig_mat.rows())
-                .and(krig_vecs.rows())
-                .for_each(|mat_row, vec_row| {
-                    krig_fac += mat_row[i] * vec_row[k];
+    Zip::from(field.view_mut())
+        .and(krig_vecs.columns())
+        .par_for_each(|f, v_col| {
+            Zip::from(cond)
+                .and(krig_mat.columns())
+                .for_each(|c, m_row| {
+                    let mut krig_fac = 0.0;
+                    Zip::from(m_row).and(v_col).for_each(|m, v| {
+                        krig_fac += m * v;
+                    });
+                    *f += c * krig_fac;
                 });
-            field[k] += cond[i] * krig_fac;
         });
-    });
 
     field
 }
