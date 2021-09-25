@@ -20,12 +20,9 @@ pub fn calculator_field_krige_and_variance(
                 .and(v_col)
                 .and(krig_mat.columns())
                 .for_each(|c, v, m_row| {
-                    let mut krig_fac = 0.0;
-                    Zip::from(m_row).and(v_col).for_each(|m, v| {
-                        krig_fac += m * v;
-                    });
-                    *e += v * krig_fac;
+                    let krig_fac = m_row.dot(&v_col);
                     *f += c * krig_fac;
+                    *e += v * krig_fac;
                 });
         });
 
@@ -49,10 +46,7 @@ pub fn calculator_field_krige(
             Zip::from(cond)
                 .and(krig_mat.columns())
                 .for_each(|c, m_row| {
-                    let mut krig_fac = 0.0;
-                    Zip::from(m_row).and(v_col).for_each(|m, v| {
-                        krig_fac += m * v;
-                    });
+                    let krig_fac = m_row.dot(&v_col);
                     *f += c * krig_fac;
                 });
         });
@@ -63,6 +57,7 @@ pub fn calculator_field_krige(
 #[cfg(test)]
 mod tests {
     use super::*;
+
     use approx::assert_ulps_eq;
     use ndarray::{arr1, arr2, Array2};
 
