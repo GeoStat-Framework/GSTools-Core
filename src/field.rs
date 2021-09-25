@@ -1,5 +1,4 @@
 use ndarray::{Array1, Array2, ArrayView1, ArrayView2, Zip};
-
 use rayon::prelude::*;
 
 pub fn summator(
@@ -21,13 +20,12 @@ pub fn summator(
                 .and(z1)
                 .and(z2)
                 .for_each(|sample, &z1, &z2| {
-                    let mut phase = 0.0;
-                    Zip::from(sample).and(pos).for_each(|&s, &p| {
-                        phase += s * p;
-                    });
+                    let phase = sample.dot(&pos);
+
                     *sum += z1 * phase.cos() + z2 * phase.sin();
                 })
         });
+
     summed_modes
 }
 
