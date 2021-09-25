@@ -20,21 +20,21 @@ fn read_2d_from_file(file_path: &Path) -> Array2<f64> {
     let file = File::open(file_path).expect("File wasn't found");
     let reader = BufReader::new(file);
 
-    let vec: Vec<Array1<f64>> = reader
-        .lines()
-        .map(|l| {
-            l.unwrap()
-                .split(char::is_whitespace)
-                .map(|number| number.parse::<f64>().unwrap())
-                .collect()
-        })
-        .collect();
+    let mut vec = Vec::new();
+    let mut lines = 0;
 
-    let shape = (vec.len(), vec[0].dim());
+    for line in reader.lines() {
+        vec.extend(
+            line.unwrap()
+                .split_whitespace()
+                .map(|number| number.parse::<f64>().unwrap()),
+        );
+        lines += 1;
+    }
 
-    let flat_vec: Vec<f64> = vec.iter().flatten().cloned().collect();
+    let shape = (lines, vec.len() / lines);
 
-    Array2::from_shape_vec(shape, flat_vec).unwrap()
+    Array2::from_shape_vec(shape, vec).unwrap()
 }
 
 pub fn field_benchmark(c: &mut Criterion) {

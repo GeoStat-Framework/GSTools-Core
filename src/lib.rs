@@ -12,7 +12,6 @@ pub mod krige;
 pub mod variogram;
 
 #[pymodule]
-#[allow(non_snake_case)]
 fn gstools_core(_py: Python<'_>, m: &PyModule) -> PyResult<()> {
     #[pyfn(m)]
     #[pyo3(name = "summate")]
