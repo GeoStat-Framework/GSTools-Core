@@ -1,4 +1,5 @@
 use ndarray::{Array1, ArrayView1, ArrayView2, Zip};
+use rayon::prelude::*;
 
 pub fn calculator_field_krige_and_variance(
     krig_mat: ArrayView2<'_, f64>,
@@ -16,14 +17,30 @@ pub fn calculator_field_krige_and_variance(
         .and(error.view_mut())
         .and(krig_vecs.columns())
         .par_for_each(|f, e, v_col| {
-            Zip::from(cond)
+            let acc = Zip::from(cond)
                 .and(v_col)
                 .and(krig_mat.columns())
-                .for_each(|c, v, m_row| {
-                    let krig_fac = m_row.dot(&v_col);
-                    *f += c * krig_fac;
-                    *e += v * krig_fac;
-                });
+                .into_par_iter()
+                .fold(
+                    || (0.0, 0.0),
+                    |mut acc, (c, v, m_row)| {
+                        let krig_fac = m_row.dot(&v_col);
+                        acc.0 += c * krig_fac;
+                        acc.1 += v * krig_fac;
+                        acc
+                    },
+                )
+                .reduce(
+                    || (0.0, 0.0),
+                    |mut lhs, rhs| {
+                        lhs.0 += rhs.0;
+                        lhs.1 += rhs.1;
+                        lhs
+                    },
+                );
+
+            *f = acc.0;
+            *e = acc.1;
         });
 
     (field, error)
@@ -43,12 +60,16 @@ pub fn calculator_field_krige(
     Zip::from(field.view_mut())
         .and(krig_vecs.columns())
         .par_for_each(|f, v_col| {
-            Zip::from(cond)
+            let acc = Zip::from(cond)
                 .and(krig_mat.columns())
-                .for_each(|c, m_row| {
+                .into_par_iter()
+                .map(|(c, m_row)| {
                     let krig_fac = m_row.dot(&v_col);
-                    *f += c * krig_fac;
-                });
+                    c * krig_fac
+                })
+                .sum();
+
+            *f = acc;
         });
 
     field
