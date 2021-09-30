@@ -40,16 +40,16 @@ fn read_2d_from_file(file_path: &Path) -> Array2<f64> {
 pub fn field_benchmark(c: &mut Criterion) {
     let path = Path::new("benches/input");
 
-    let x = read_1d_from_file(&path.join("field_bench_x.txt"));
-    let y = read_1d_from_file(&path.join("field_bench_y.txt"));
-    let z = read_1d_from_file(&path.join("field_bench_z.txt"));
+    let x = read_1d_from_file(&path.join("field_x.txt"));
+    let y = read_1d_from_file(&path.join("field_y.txt"));
+    let z = read_1d_from_file(&path.join("field_z.txt"));
 
     let pos = stack![Axis(0), x, y, z];
 
-    let cov_samples = read_2d_from_file(&path.join("field_bench_cov_samples.txt"));
+    let cov_samples = read_2d_from_file(&path.join("field_cov_samples.txt"));
 
-    let z_1 = read_1d_from_file(&path.join("field_bench_z_1.txt"));
-    let z_2 = read_1d_from_file(&path.join("field_bench_z_2.txt"));
+    let z_1 = read_1d_from_file(&path.join("field_z_1.txt"));
+    let z_2 = read_1d_from_file(&path.join("field_z_2.txt"));
 
     c.bench_function("field summate", |b| {
         b.iter(|| summator(cov_samples.view(), z_1.view(), z_2.view(), pos.view()))
@@ -63,9 +63,9 @@ pub fn field_benchmark(c: &mut Criterion) {
 pub fn krige_benchmark(c: &mut Criterion) {
     let path = Path::new("benches/input");
 
-    let krige_mat = read_2d_from_file(&path.join("krige_bench_krige_mat.txt"));
-    let k_vec = read_2d_from_file(&path.join("krige_bench_k_vec.txt"));
-    let krige_cond = read_1d_from_file(&path.join("krige_bench_krige_cond.txt"));
+    let krige_mat = read_2d_from_file(&path.join("krige_krige_mat.txt"));
+    let k_vec = read_2d_from_file(&path.join("krige_k_vec.txt"));
+    let krige_cond = read_1d_from_file(&path.join("krige_krige_cond.txt"));
 
     c.bench_function("krige error", |b| {
         b.iter(|| {
