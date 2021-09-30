@@ -8,8 +8,8 @@ from gstools.field.generator import RandMeth, IncomprRandMeth
 
 
 def gen_field_summate(path, seed):
-    pos_no = 1000
-    mode_no = 100
+    pos_no = 100_000
+    mode_no = 1_000
     x = np.linspace(0.0, 10.0, pos_no)
     y = np.linspace(-5.0, 5.0, pos_no)
     z = np.linspace(-6.0, 8.0, pos_no)
@@ -17,29 +17,12 @@ def gen_field_summate(path, seed):
     model = gs.Gaussian(dim=3, var=1.0, len_scale=1.0)
 
     rm = RandMeth(model, mode_no, seed)
-    np.savetxt(path / 'field_bench_x.txt', x)
-    np.savetxt(path / 'field_bench_y.txt', y)
-    np.savetxt(path / 'field_bench_z.txt', z)
-    np.savetxt(path / 'field_bench_cov_samples.txt', rm._cov_sample)
-    np.savetxt(path / 'field_bench_z_1.txt', rm._z_1)
-    np.savetxt(path / 'field_bench_z_2.txt', rm._z_2)
-
-    pos_no = 100000
-    mode_no = 1000
-    x = np.linspace(0.0, 10.0, pos_no)
-    y = np.linspace(-5.0, 5.0, pos_no)
-    z = np.linspace(-6.0, 8.0, pos_no)
-
-    model = gs.Gaussian(dim=3, var=1.0, len_scale=1.0)
-
-    rm = RandMeth(model, mode_no, seed)
-
-    np.savetxt(path / 'field_vs_x.txt', x)
-    np.savetxt(path / 'field_vs_y.txt', y)
-    np.savetxt(path / 'field_vs_z.txt', z)
-    np.savetxt(path / 'field_vs_cov_samples.txt', rm._cov_sample)
-    np.savetxt(path / 'field_vs_z_1.txt', rm._z_1)
-    np.savetxt(path / 'field_vs_z_2.txt', rm._z_2)
+    np.savetxt(path / 'field_x.txt', x)
+    np.savetxt(path / 'field_y.txt', y)
+    np.savetxt(path / 'field_z.txt', z)
+    np.savetxt(path / 'field_cov_samples.txt', rm._cov_sample)
+    np.savetxt(path / 'field_z_1.txt', rm._z_1)
+    np.savetxt(path / 'field_z_2.txt', rm._z_2)
 
 def gen_krige(path, seed):
     def prepare_data(pos_no, cond_no):
@@ -67,21 +50,11 @@ def gen_krige(path, seed):
 
         return krige_mat, k_vec, krige_cond
 
-    pos_no = 10000
-    cond_no = 500
-    krige_mat, k_vec, krige_cond = prepare_data(pos_no, cond_no)
+    krige_mat, k_vec, krige_cond = prepare_data(pos_no=10_000, cond_no=500)
 
-    np.savetxt(path / 'krige_vs_krige_mat.txt', krige_mat)
-    np.savetxt(path / 'krige_vs_k_vec.txt', k_vec)
-    np.savetxt(path / 'krige_vs_krige_cond.txt', krige_cond)
-
-    pos_no = 1000
-    cond_no = 50
-    krige_mat, k_vec, krige_cond = prepare_data(pos_no, cond_no)
-
-    np.savetxt(path / 'krige_bench_krige_mat.txt', krige_mat)
-    np.savetxt(path / 'krige_bench_k_vec.txt', k_vec)
-    np.savetxt(path / 'krige_bench_krige_cond.txt', krige_cond)
+    np.savetxt(path / 'krige_krige_mat.txt', krige_mat)
+    np.savetxt(path / 'krige_k_vec.txt', k_vec)
+    np.savetxt(path / 'krige_krige_cond.txt', krige_cond)
 
 
 if __name__ == '__main__':
