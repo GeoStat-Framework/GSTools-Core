@@ -6,11 +6,11 @@ pub fn summator(
     z2: ArrayView1<'_, f64>,
     pos: ArrayView2<'_, f64>,
 ) -> Array1<f64> {
-    assert!(cov_samples.shape()[0] == pos.shape()[0]);
-    assert!(cov_samples.shape()[1] == z1.shape()[0]);
-    assert!(z1.shape()[0] == z2.shape()[0]);
+    assert_eq!(cov_samples.dim().0, pos.dim().0);
+    assert_eq!(cov_samples.dim().1, z1.dim());
+    assert_eq!(cov_samples.dim().1, z2.dim());
 
-    let mut summed_modes = Array1::<f64>::zeros(pos.shape()[1]);
+    let mut summed_modes = Array1::<f64>::zeros(pos.dim().1);
 
     Zip::from(&mut summed_modes)
         .and(pos.columns())
@@ -34,34 +34,33 @@ pub fn summator_incompr(
     z2: ArrayView1<'_, f64>,
     pos: ArrayView2<'_, f64>,
 ) -> Array2<f64> {
-    assert!(cov_samples.shape()[0] == pos.shape()[0]);
-    assert!(cov_samples.shape()[1] == z1.shape()[0]);
-    assert!(z1.shape()[0] == z2.shape()[0]);
-
-    let dim = pos.shape()[0];
+    assert_eq!(cov_samples.dim().0, pos.dim().0);
+    assert_eq!(cov_samples.dim().1, z1.dim());
+    assert_eq!(cov_samples.dim().1, z2.dim());
 
     let mut summed_modes = Array2::<f64>::zeros(pos.dim());
 
     // unit vector in x dir.
-    let mut e1 = Array1::<f64>::zeros(dim);
+    let mut e1 = Array1::<f64>::zeros(pos.dim().0);
     e1[0] = 1.0;
 
-    Zip::from(pos.columns())
-        .and(summed_modes.columns_mut())
-        .par_for_each(|pos, mut summed_modes| {
-            Zip::from(cov_samples.columns())
-                .and(z1)
-                .and(z2)
-                .for_each(|cov_samples, z1, z2| {
-                    let k_2 = cov_samples.dot(&cov_samples);
+    Zip::from(cov_samples.columns())
+        .and(z1)
+        .and(z2)
+        .for_each(|cov_samples, z1, z2| {
+            let k_2 = cov_samples[0] / cov_samples.dot(&cov_samples);
+
+            Zip::from(pos.columns())
+                .and(summed_modes.columns_mut())
+                .par_for_each(|pos, mut summed_modes| {
                     let phase = cov_samples.dot(&pos);
+                    let z12 = z1 * phase.cos() + z2 * phase.sin();
 
                     Zip::from(&mut summed_modes)
                         .and(&e1)
                         .and(cov_samples)
                         .for_each(|sum, e1, cs| {
-                            let proj = *e1 - cs * cov_samples[0] / k_2;
-                            *sum += proj * (z1 * phase.cos() + z2 * phase.sin());
+                            *sum += (*e1 - cs * k_2) * z12;
                         });
                 });
         });
