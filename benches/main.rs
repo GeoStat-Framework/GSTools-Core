@@ -1,7 +1,12 @@
 use criterion::{criterion_group, criterion_main, Criterion};
 use gstools_core::field::{summator, summator_incompr};
 use gstools_core::krige::{calculator_field_krige, calculator_field_krige_and_variance};
-use ndarray::{stack, Array1, Array2, Axis};
+use gstools_core::variogram::{
+    variogram_directional, variogram_ma_structured, variogram_structured, variogram_unstructured,
+};
+use ndarray::{arr2, stack, Array1, Array2, Axis};
+use ndarray_rand::rand_distr::Uniform;
+use ndarray_rand::RandomExt;
 use std::fs::File;
 use std::io::{BufRead, BufReader};
 use std::path::Path;
@@ -78,5 +83,57 @@ pub fn krige_benchmark(c: &mut Criterion) {
     });
 }
 
-criterion_group!(benches, field_benchmark, krige_benchmark);
+pub fn variogram_benchmark(c: &mut Criterion) {
+    let x = 600;
+    let y = 500;
+    let f = Array2::from_elem((x, y), 1.0);
+    let mask = Array2::from_elem((x, y), true);
+
+    c.bench_function("variogram structured", |b| {
+        b.iter(|| {
+            variogram_structured(f.view(), 'm');
+        })
+    });
+    c.bench_function("variogram masked structured", |b| {
+        b.iter(|| {
+            variogram_ma_structured(f.view(), mask.view(), 'm');
+        })
+    });
+
+    let pos_no = 2_000;
+    let f = Array2::from_elem((1, pos_no), 1.0);
+    let bin_edges = Array1::linspace(0., 20., 30);
+    let pos = Array2::random((2, pos_no), Uniform::new(-10., 10.));
+
+    c.bench_function("variogram unstructured", |b| {
+        b.iter(|| {
+            variogram_unstructured(2, f.view(), bin_edges.view(), pos.view(), 'm', 'e');
+        })
+    });
+
+    let direction = arr2(&[[0., std::f64::consts::PI], [0., 0.]]);
+
+    c.bench_function("variogram directional", |b| {
+        b.iter(|| {
+            variogram_directional(
+                2,
+                f.view(),
+                bin_edges.view(),
+                pos.view(),
+                direction.view(),
+                std::f64::consts::PI / 8.,
+                -1.0,
+                false,
+                'm',
+            );
+        })
+    });
+}
+
+criterion_group!(
+    benches,
+    field_benchmark,
+    krige_benchmark,
+    variogram_benchmark
+);
 criterion_main!(benches);
