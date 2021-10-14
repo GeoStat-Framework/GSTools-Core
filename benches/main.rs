@@ -1,15 +1,20 @@
-use criterion::{criterion_group, criterion_main, Criterion};
+use std::fs::File;
+use std::io::{BufRead, BufReader};
+use std::path::Path;
+
+use criterion::{black_box, criterion_group, criterion_main, Criterion};
+use ndarray::{arr2, stack, Array1, Array2, Axis};
+use ndarray_rand::{
+    rand::{rngs::SmallRng, SeedableRng},
+    rand_distr::{Bernoulli, Uniform},
+    RandomExt,
+};
+
 use gstools_core::field::{summator, summator_incompr};
 use gstools_core::krige::{calculator_field_krige, calculator_field_krige_and_variance};
 use gstools_core::variogram::{
     variogram_directional, variogram_ma_structured, variogram_structured, variogram_unstructured,
 };
-use ndarray::{arr2, stack, Array1, Array2, Axis};
-use ndarray_rand::rand_distr::Uniform;
-use ndarray_rand::RandomExt;
-use std::fs::File;
-use std::io::{BufRead, BufReader};
-use std::path::Path;
 
 fn read_1d_from_file(file_path: &Path) -> Array1<f64> {
     let file = File::open(file_path).expect("File wasn't found");
@@ -84,30 +89,39 @@ pub fn krige_benchmark(c: &mut Criterion) {
 }
 
 pub fn variogram_benchmark(c: &mut Criterion) {
+    let mut rng = SmallRng::seed_from_u64(42);
+
     let x = 600;
     let y = 500;
     let f = Array2::from_elem((x, y), 1.0);
-    let mask = Array2::from_elem((x, y), true);
+    let mask = Array2::random_using((x, y), Bernoulli::new(0.5).unwrap(), &mut rng);
 
     c.bench_function("variogram structured", |b| {
         b.iter(|| {
-            variogram_structured(f.view(), 'm');
+            variogram_structured(black_box(f.view()), 'm');
         })
     });
     c.bench_function("variogram masked structured", |b| {
         b.iter(|| {
-            variogram_ma_structured(f.view(), mask.view(), 'm');
+            variogram_ma_structured(black_box(f.view()), black_box(mask.view()), 'm');
         })
     });
 
     let pos_no = 2_000;
     let f = Array2::from_elem((1, pos_no), 1.0);
     let bin_edges = Array1::linspace(0., 20., 30);
-    let pos = Array2::random((2, pos_no), Uniform::new(-10., 10.));
+    let pos = Array2::random_using((2, pos_no), Uniform::new(-10., 10.), &mut rng);
 
     c.bench_function("variogram unstructured", |b| {
         b.iter(|| {
-            variogram_unstructured(2, f.view(), bin_edges.view(), pos.view(), 'm', 'e');
+            variogram_unstructured(
+                2,
+                black_box(f.view()),
+                black_box(bin_edges.view()),
+                black_box(pos.view()),
+                'm',
+                'e',
+            );
         })
     });
 
@@ -117,10 +131,10 @@ pub fn variogram_benchmark(c: &mut Criterion) {
         b.iter(|| {
             variogram_directional(
                 2,
-                f.view(),
-                bin_edges.view(),
-                pos.view(),
-                direction.view(),
+                black_box(f.view()),
+                black_box(bin_edges.view()),
+                black_box(pos.view()),
+                black_box(direction.view()),
                 std::f64::consts::PI / 8.,
                 -1.0,
                 false,
