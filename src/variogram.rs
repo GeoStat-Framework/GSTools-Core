@@ -1,4 +1,4 @@
-use ndarray::{Array1, Array2, ArrayView1, ArrayView2, ArrayViewMut1, ArrayViewMut2, Zip};
+use ndarray::{s, Array1, Array2, ArrayView1, ArrayView2, ArrayViewMut1, ArrayViewMut2, Zip};
 
 trait Estimator {
     fn estimate(f_diff: f64) -> f64;
@@ -61,7 +61,9 @@ impl Estimator for Cressie {
 }
 
 trait Distance {
-    fn dist(dim: usize, pos: ArrayView2<f64>, i: usize, j: usize) -> f64;
+    fn dist(lhs: ArrayView1<f64>, rhs: ArrayView1<f64>) -> f64;
+
+    fn check_dim(_dim: usize) {}
 }
 
 macro_rules! choose_distance {
@@ -84,10 +86,14 @@ macro_rules! choose_distance {
 struct Euclid;
 
 impl Distance for Euclid {
-    fn dist(dim: usize, pos: ArrayView2<f64>, i: usize, j: usize) -> f64 {
-        (0..dim)
-            .map(|d| (pos[[d, i]] - pos[[d, j]]).powi(2))
-            .sum::<f64>()
+    fn dist(lhs: ArrayView1<f64>, rhs: ArrayView1<f64>) -> f64 {
+        Zip::from(lhs)
+            .and(rhs)
+            .fold(0.0, |mut acc, lhs, rhs| {
+                acc += (lhs - rhs).powi(2);
+
+                acc
+            })
             .sqrt()
     }
 }
@@ -95,18 +101,20 @@ impl Distance for Euclid {
 struct Haversine;
 
 impl Distance for Haversine {
-    fn dist(dim: usize, pos: ArrayView2<f64>, i: usize, j: usize) -> f64 {
-        assert!(dim == 2, "Haversine: dim = {} != 2", dim);
-
-        let diff_lat = (pos[[0, j]] - pos[[0, i]]).to_radians();
-        let diff_lon = (pos[[1, j]] - pos[[1, i]]).to_radians();
+    fn dist(lhs: ArrayView1<f64>, rhs: ArrayView1<f64>) -> f64 {
+        let diff_lat = (lhs[0] - rhs[0]).to_radians();
+        let diff_lon = (lhs[1] - rhs[1]).to_radians();
 
         let arg = (diff_lat / 2.0).sin().powi(2)
-            + (pos[[0, i]].to_radians()).cos()
-                * (pos[[0, j]].to_radians()).cos()
+            + (lhs[0].to_radians()).cos()
+                * (rhs[0].to_radians()).cos()
                 * (diff_lon / 2.0).sin().powi(2);
 
         2.0 * arg.sqrt().atan2((1.0 - arg).sqrt())
+    }
+
+    fn check_dim(dim: usize) {
+        assert_eq!(dim, 2, "Haversine: dim = {} != 2", dim);
     }
 }
 
@@ -265,7 +273,7 @@ pub fn variogram_directional(
         for i in 0..i_max {
             for j in 0..j_max {
                 for k in j + 1..k_max {
-                    let dist = Euclid::dist(dim, pos, j, k);
+                    let dist = Euclid::dist(pos.slice(s![..dim, j]), pos.slice(s![..dim, k]));
                     if dist < bin_edges[i] || dist >= bin_edges[i + 1] {
                         continue; //skip if not in current bin
                     }
@@ -316,16 +324,17 @@ pub fn variogram_unstructured(
     estimator_type: char,
     distance_type: char,
 ) -> (Array1<f64>, Array1<u64>) {
-    assert!(
-        pos.shape()[1] == f.shape()[1],
+    assert_eq!(
+        pos.dim().1,
+        f.dim().1,
         "len(pos) = {} != len(f) = {}",
-        pos.shape()[1],
-        f.shape()[1],
+        pos.dim().1,
+        f.dim().1,
     );
     assert!(
-        bin_edges.shape()[0] > 1,
+        bin_edges.dim() > 1,
         "len(bin_edges) = {} < 2 too small",
-        bin_edges.shape()[0]
+        bin_edges.dim()
     );
 
     fn inner<E: Estimator, D: Distance>(
@@ -334,31 +343,44 @@ pub fn variogram_unstructured(
         bin_edges: ArrayView1<'_, f64>,
         pos: ArrayView2<'_, f64>,
     ) -> (Array1<f64>, Array1<u64>) {
-        let i_max = bin_edges.shape()[0] - 1;
-        let j_max = pos.shape()[1] - 1;
-        let k_max = pos.shape()[1];
-        let f_max = f.shape()[0];
+        D::check_dim(dim);
 
-        let mut variogram = Array1::<f64>::zeros(i_max);
-        let mut counts = Array1::<u64>::zeros(i_max);
+        let out_size = bin_edges.dim() - 1;
+        let in_size = pos.dim().1 - 1;
 
-        for i in 0..i_max {
-            for j in 0..j_max {
-                for k in j + 1..k_max {
-                    let dist = D::dist(dim, pos, j, k);
-                    if dist < bin_edges[i] || dist >= bin_edges[i + 1] {
-                        continue; //skip if not in current bin
-                    }
-                    for m in 0..f_max {
-                        // skip no data values
-                        if !(f[[m, k]].is_nan() || f[[m, j]].is_nan()) {
-                            counts[i] += 1;
-                            variogram[i] += E::estimate(f[[m, k]] - f[[m, j]]);
-                        }
-                    }
-                }
-            }
-        }
+        let mut variogram = Array1::<f64>::zeros(out_size);
+        let mut counts = Array1::<u64>::zeros(out_size);
+
+        Zip::from(bin_edges.windows(2))
+            .and(&mut variogram)
+            .and(&mut counts)
+            .par_for_each(|bin_edges, variogram, counts| {
+                let lower_bin_edge = bin_edges[0];
+                let upper_bin_edge = bin_edges[1];
+
+                Zip::indexed(f.slice(s![.., ..in_size]).columns())
+                    .and(pos.slice(s![..dim, ..in_size]).columns())
+                    .for_each(|i, f_i, pos_i| {
+                        Zip::from(f.slice(s![.., i + 1..]).columns())
+                            .and(pos.slice(s![..dim, i + 1..]).columns())
+                            .for_each(|f_j, pos_j| {
+                                let dist = D::dist(pos_i, pos_j);
+                                if dist < lower_bin_edge || dist >= upper_bin_edge {
+                                    return; //skip if not in current bin
+                                }
+
+                                Zip::from(f_i).and(f_j).for_each(|f_i, f_j| {
+                                    let f_ij = f_i - f_j;
+                                    if f_ij.is_nan() {
+                                        return; // skip no data values
+                                    }
+
+                                    *counts += 1;
+                                    *variogram += E::estimate(f_ij);
+                                });
+                            });
+                    });
+            });
 
         E::normalize(variogram.view_mut(), counts.view());
 
