@@ -1,4 +1,5 @@
 use ndarray::{s, Array1, Array2, ArrayView1, ArrayView2, ArrayViewMut1, ArrayViewMut2, Zip};
+use rayon::iter::{IntoParallelIterator, ParallelIterator};
 
 trait Estimator {
     fn estimate(f_diff: f64) -> f64;
@@ -358,28 +359,64 @@ pub fn variogram_unstructured(
                 let lower_bin_edge = bin_edges[0];
                 let upper_bin_edge = bin_edges[1];
 
-                Zip::indexed(f.slice(s![.., ..in_size]).columns())
+                let acc_i = Zip::indexed(f.slice(s![.., ..in_size]).columns())
                     .and(pos.slice(s![..dim, ..in_size]).columns())
-                    .for_each(|i, f_i, pos_i| {
-                        Zip::from(f.slice(s![.., i + 1..]).columns())
-                            .and(pos.slice(s![..dim, i + 1..]).columns())
-                            .for_each(|f_j, pos_j| {
-                                let dist = D::dist(pos_i, pos_j);
-                                if dist < lower_bin_edge || dist >= upper_bin_edge {
-                                    return; //skip if not in current bin
-                                }
+                    .into_par_iter()
+                    .fold(
+                        || (0, 0.0),
+                        |mut acc_i, (i, f_i, pos_i)| {
+                            let acc_j = Zip::from(f.slice(s![.., i + 1..]).columns())
+                                .and(pos.slice(s![..dim, i + 1..]).columns())
+                                .into_par_iter()
+                                .fold(
+                                    || (0, 0.0),
+                                    |mut acc_j, (f_j, pos_j)| {
+                                        let dist = D::dist(pos_i, pos_j);
+                                        if dist < lower_bin_edge || dist >= upper_bin_edge {
+                                            return acc_j; //skip if not in current bin
+                                        }
 
-                                Zip::from(f_i).and(f_j).for_each(|f_i, f_j| {
-                                    let f_ij = f_i - f_j;
-                                    if f_ij.is_nan() {
-                                        return; // skip no data values
-                                    }
+                                        Zip::from(f_i).and(f_j).for_each(|f_i, f_j| {
+                                            let f_ij = f_i - f_j;
+                                            if f_ij.is_nan() {
+                                                return; // skip no data values
+                                            }
 
-                                    *counts += 1;
-                                    *variogram += E::estimate(f_ij);
-                                });
-                            });
-                    });
+                                            acc_j.0 += 1;
+                                            acc_j.1 += E::estimate(f_ij);
+                                        });
+
+                                        acc_j
+                                    },
+                                )
+                                .reduce(
+                                    || (0, 0.0),
+                                    |mut lhs, rhs| {
+                                        lhs.0 += rhs.0;
+                                        lhs.1 += rhs.1;
+
+                                        lhs
+                                    },
+                                );
+
+                            acc_i.0 += acc_j.0;
+                            acc_i.1 += acc_j.1;
+
+                            acc_i
+                        },
+                    )
+                    .reduce(
+                        || (0, 0.0),
+                        |mut lhs, rhs| {
+                            lhs.0 += rhs.0;
+                            lhs.1 += rhs.1;
+
+                            lhs
+                        },
+                    );
+
+                *counts = acc_i.0;
+                *variogram += acc_i.1;
             });
 
         E::normalize(variogram.view_mut(), counts.view());
