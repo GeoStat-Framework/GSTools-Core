@@ -106,8 +106,8 @@ impl Distance for Haversine {
         let diff_lon = (lhs[1] - rhs[1]).to_radians();
 
         let arg = (diff_lat / 2.0).sin().powi(2)
-            + (lhs[0].to_radians()).cos()
-                * (rhs[0].to_radians()).cos()
+            + lhs[0].to_radians().cos()
+                * rhs[0].to_radians().cos()
                 * (diff_lon / 2.0).sin().powi(2);
 
         2.0 * arg.sqrt().atan2((1.0 - arg).sqrt())
@@ -120,21 +120,21 @@ impl Distance for Haversine {
 
 pub fn variogram_structured(f: ArrayView2<'_, f64>, estimator_type: char) -> Array1<f64> {
     fn inner<E: Estimator>(f: ArrayView2<'_, f64>) -> Array1<f64> {
-        let i_max = f.shape()[0] - 1;
-        let j_max = f.shape()[1];
-        let k_max = i_max + 1;
+        let size = f.dim().0;
 
-        let mut variogram = Array1::<f64>::zeros(k_max);
-        let mut counts = Array1::<u64>::zeros(k_max);
+        let mut variogram = Array1::<f64>::zeros(size);
+        let mut counts = Array1::<u64>::zeros(size);
 
-        (0..i_max).into_iter().for_each(|i| {
-            (0..j_max).into_iter().for_each(|j| {
-                (1..k_max - i).into_iter().for_each(|k| {
-                    counts[k] += 1;
-                    variogram[k] += E::estimate(f[[i, j]] - f[[i + k, j]]);
-                });
+        Zip::indexed(variogram.slice_mut(s![1..]))
+            .and(counts.slice_mut(s![1..]))
+            .par_for_each(|k, variogram, counts| {
+                Zip::from(f.slice(s![..size - k - 1, ..]))
+                    .and(f.slice(s![k + 1.., ..]))
+                    .for_each(|f_i, f_j| {
+                        *counts += 1;
+                        *variogram += E::estimate(f_i - f_j);
+                    });
             });
-        });
 
         E::normalize(variogram.view_mut(), counts.view());
 
@@ -152,23 +152,27 @@ pub fn variogram_ma_structured(
     estimator_type: char,
 ) -> Array1<f64> {
     fn inner<E: Estimator>(f: ArrayView2<'_, f64>, mask: ArrayView2<'_, bool>) -> Array1<f64> {
-        let i_max = f.shape()[0] - 1;
-        let j_max = f.shape()[1];
-        let k_max = i_max + 1;
+        let size = f.dim().0;
 
-        let mut variogram = Array1::<f64>::zeros(k_max);
-        let mut counts = Array1::<u64>::zeros(k_max);
+        let mut variogram = Array1::<f64>::zeros(size);
+        let mut counts = Array1::<u64>::zeros(size);
 
-        (0..i_max).into_iter().for_each(|i| {
-            (0..j_max).into_iter().for_each(|j| {
-                (1..k_max - i).into_iter().for_each(|k| {
-                    if !mask[[i, j]] && !mask[[i + k, j]] {
-                        counts[k] += 1;
-                        variogram[k] += E::estimate(f[[i, j]] - f[[i + k, j]]);
-                    }
-                });
+        Zip::indexed(variogram.slice_mut(s![1..]))
+            .and(counts.slice_mut(s![1..]))
+            .par_for_each(|k, variogram, counts| {
+                Zip::from(f.slice(s![..size - k - 1, ..]))
+                    .and(f.slice(s![k + 1.., ..]))
+                    .and(mask.slice(s![..size - k - 1, ..]))
+                    .and(mask.slice(s![k + 1.., ..]))
+                    .for_each(|f_i, f_j, m_i, m_j| {
+                        if *m_i || *m_j {
+                            return;
+                        }
+
+                        *counts += 1;
+                        *variogram += E::estimate(f_i - f_j);
+                    });
             });
-        });
 
         E::normalize(variogram.view_mut(), counts.view());
 
