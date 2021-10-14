@@ -38,7 +38,7 @@ impl Estimator for Matheron {
     }
 
     fn normalize(variogram: ArrayViewMut1<f64>, counts: ArrayView1<u64>) {
-        Zip::from(variogram).and(counts).par_for_each(|v, c| {
+        Zip::from(variogram).and(counts).for_each(|v, c| {
             let cf = if *c == 0 { 1.0 } else { *c as f64 };
             *v /= 2.0 * cf;
         });
@@ -53,7 +53,7 @@ impl Estimator for Cressie {
     }
 
     fn normalize(variogram: ArrayViewMut1<f64>, counts: ArrayView1<u64>) {
-        Zip::from(variogram).and(counts).par_for_each(|v, c| {
+        Zip::from(variogram).and(counts).for_each(|v, c| {
             let cf = if *c == 0 { 1.0 } else { *c as f64 };
             *v = 0.5 * (1. / cf * *v).powi(4) / (0.457 + 0.494 / cf + 0.045 / (cf * cf))
         });
