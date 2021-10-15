@@ -1,4 +1,6 @@
-use ndarray::{s, Array1, Array2, ArrayView1, ArrayView2, ArrayViewMut1, ArrayViewMut2, Zip};
+use ndarray::{
+    s, Array1, Array2, ArrayView1, ArrayView2, ArrayViewMut1, ArrayViewMut2, FoldWhile, Zip,
+};
 
 trait Estimator {
     fn estimate(f_diff: f64) -> f64;
@@ -184,34 +186,39 @@ pub fn variogram_ma_structured(
     })
 }
 
-#[allow(clippy::too_many_arguments)]
 fn dir_test(
-    dim: usize,
-    pos: ArrayView2<'_, f64>,
+    dir: ArrayView1<'_, f64>,
+    pos_i: ArrayView1<'_, f64>,
+    pos_j: ArrayView1<'_, f64>,
     dist: f64,
-    direction: ArrayView2<'_, f64>,
     angles_tol: f64,
     bandwidth: f64,
-    i: usize,
-    j: usize,
-    d: usize,
 ) -> bool {
-    let mut s_prod = 0.0; //scalar product
-    let mut b_dist = 0.0; //band-distance
-    let mut in_band = true;
-    let mut in_angle = true;
-
     //scalar-product calculation for bandwidth projection and angle calculation
-    for k in 0..dim {
-        s_prod += (pos[[k, i]] - pos[[k, j]]) * direction[[d, k]];
-    }
+    let s_prod = Zip::from(dir)
+        .and(pos_i)
+        .and(pos_j)
+        .fold(0.0, |mut acc, dir, pos_i, pos_j| {
+            acc += (pos_i - pos_j) * dir;
+
+            acc
+        });
 
     //calculate band-distance by projection of point-pair-vec to direction line
     if bandwidth > 0.0 {
-        for k in 0..dim {
-            b_dist += ((pos[[k, i]] - pos[[k, j]]) - s_prod * direction[[d, k]]).powi(2);
+        let b_dist = Zip::from(dir)
+            .and(pos_i)
+            .and(pos_j)
+            .fold(0.0, |mut acc, dir, pos_i, pos_j| {
+                acc += ((pos_i - pos_j) - s_prod * dir).powi(2);
+
+                acc
+            })
+            .sqrt();
+
+        if b_dist.sqrt() >= bandwidth {
+            return false;
         }
-        in_band = b_dist.sqrt() < bandwidth;
     }
 
     //allow repeating points (dist = 0)
@@ -220,11 +227,13 @@ fn dir_test(
         let angle = s_prod.abs() / dist;
         if angle < 1.0 {
             //else same direction (prevent numerical errors)
-            in_angle = angle.acos() < angles_tol;
+            if angle.acos() >= angles_tol {
+                return false;
+            }
         }
     }
 
-    in_band && in_angle
+    true
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -240,15 +249,15 @@ pub fn variogram_directional(
     estimator_type: char,
 ) -> (Array2<f64>, Array2<u64>) {
     assert!(
-        pos.shape()[1] == f.shape()[1],
+        pos.dim().1 == f.dim().1,
         "len(pos) = {} != len(f) = {}",
-        pos.shape()[1],
-        f.shape()[1],
+        pos.dim().1,
+        f.dim().1,
     );
     assert!(
-        bin_edges.shape()[0] > 1,
+        bin_edges.dim() > 1,
         "len(bin_edges) = {} < 2 too small",
-        bin_edges.shape()[0]
+        bin_edges.dim()
     );
     assert!(
         angles_tol > 0.0,
@@ -265,41 +274,60 @@ pub fn variogram_directional(
         bandwidth: f64,
         separate_dirs: bool,
     ) -> (Array2<f64>, Array2<u64>) {
-        let d_max = direction.shape()[0];
-        let i_max = bin_edges.shape()[0] - 1;
-        let j_max = pos.shape()[1] - 1;
-        let k_max = pos.shape()[1];
-        let f_max = f.shape()[0];
+        let out_size = (direction.dim().0, bin_edges.dim() - 1);
+        let in_size = pos.dim().1 - 1;
 
-        let mut variogram = Array2::<f64>::zeros((d_max, i_max));
-        let mut counts = Array2::<u64>::zeros((d_max, i_max));
+        let mut variogram = Array2::<f64>::zeros(out_size);
+        let mut counts = Array2::<u64>::zeros(out_size);
 
-        for i in 0..i_max {
-            for j in 0..j_max {
-                for k in j + 1..k_max {
-                    let dist = Euclid::dist(pos.slice(s![..dim, j]), pos.slice(s![..dim, k]));
-                    if dist < bin_edges[i] || dist >= bin_edges[i + 1] {
-                        continue; //skip if not in current bin
-                    }
-                    for d in 0..d_max {
-                        if !dir_test(dim, pos, dist, direction, angles_tol, bandwidth, k, j, d) {
-                            continue;
-                        }
-                        for m in 0..f_max {
-                            if !(f[[m, k]].is_nan() || f[[m, j]].is_nan()) {
-                                counts[[d, i]] += 1;
-                                variogram[[d, i]] += E::estimate(f[[m, k]] - f[[m, j]]);
-                            }
-                        }
-                        //once we found a fitting direction
-                        //break the search if directions are separated
-                        if separate_dirs {
-                            break;
-                        }
-                    }
-                }
-            }
-        }
+        Zip::from(bin_edges.windows(2))
+            .and(variogram.columns_mut())
+            .and(counts.columns_mut())
+            .par_for_each(|bin_edges, mut variogram, mut counts| {
+                let lower_bin_edge = bin_edges[0];
+                let upper_bin_edge = bin_edges[1];
+
+                Zip::indexed(f.slice(s![.., ..in_size]).columns())
+                    .and(pos.slice(s![..dim, ..in_size]).columns())
+                    .for_each(|i, f_i, pos_i| {
+                        Zip::from(f.slice(s![.., i + 1..]).columns())
+                            .and(pos.slice(s![..dim, i + 1..]).columns())
+                            .for_each(|f_j, pos_j| {
+                                let dist = Euclid::dist(pos_i, pos_j);
+                                if dist < lower_bin_edge || dist >= upper_bin_edge {
+                                    return; //skip if not in current bin
+                                }
+
+                                Zip::from(direction.slice(s![.., ..dim]).rows())
+                                    .and(&mut variogram)
+                                    .and(&mut counts)
+                                    .fold_while((), |(), dir, variogram, counts| {
+                                        if !dir_test(dir, pos_i, pos_j, dist, angles_tol, bandwidth)
+                                        {
+                                            return FoldWhile::Continue(());
+                                        }
+
+                                        Zip::from(f_i).and(f_j).for_each(|f_i, f_j| {
+                                            let f_ij = f_i - f_j;
+                                            if f_ij.is_nan() {
+                                                return; // skip no data values
+                                            }
+
+                                            *counts += 1;
+                                            *variogram += E::estimate(f_ij);
+                                        });
+
+                                        //once we found a fitting direction
+                                        //break the search if directions are separated
+                                        if separate_dirs {
+                                            return FoldWhile::Done(());
+                                        }
+
+                                        FoldWhile::Continue(())
+                                    });
+                            });
+                    });
+            });
 
         E::normalize_vec(variogram.view_mut(), counts.view());
 
