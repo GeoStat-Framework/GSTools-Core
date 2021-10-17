@@ -9,6 +9,7 @@ use variogram::{
 
 pub mod field;
 pub mod krige;
+mod short_vec;
 pub mod variogram;
 
 #[pymodule]
