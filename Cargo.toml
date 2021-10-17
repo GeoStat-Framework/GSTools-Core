@@ -25,24 +25,15 @@ lto = true
 codegen-units = 1
 
 [dependencies]
+pyo3 = { version = "0.14", features = ["extension-module"] }
 numpy = "0.14.1"
+ndarray = { version = "0.15", features = ["rayon", "approx"] }
 rayon = "1.5.1"
 
-[dependencies.ndarray]
-version = "0.15.3"
-features = ["rayon", "approx"]
-
-[dependencies.pyo3]
-version = "0.14.3"
-features = ["extension-module"]
-
 [dev-dependencies]
+criterion = { version = "0.3", features = ["html_reports"] }
 approx = "0.4"
 ndarray-rand = "0.14.0"
-
-[dev-dependencies.criterion]
-version = "0.3.5"
-features = ["html_reports"]
 
 [[bench]]
 name = "main"

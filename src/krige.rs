@@ -6,9 +6,9 @@ pub fn calculator_field_krige_and_variance(
     krig_vecs: ArrayView2<'_, f64>,
     cond: ArrayView1<'_, f64>,
 ) -> (Array1<f64>, Array1<f64>) {
-    assert!(krig_mat.shape()[0] == krig_mat.shape()[1]);
-    assert!(krig_mat.shape()[0] == krig_vecs.shape()[0]);
-    assert!(krig_mat.shape()[0] == cond.shape()[0]);
+    assert_eq!(krig_mat.dim().0, krig_mat.dim().1);
+    assert_eq!(krig_mat.dim().0, krig_vecs.dim().0);
+    assert_eq!(krig_mat.dim().0, cond.dim());
 
     let mut field = Array1::<f64>::zeros(krig_vecs.shape()[1]);
     let mut error = Array1::<f64>::zeros(krig_vecs.shape()[1]);
@@ -51,9 +51,9 @@ pub fn calculator_field_krige(
     krig_vecs: ArrayView2<'_, f64>,
     cond: ArrayView1<'_, f64>,
 ) -> Array1<f64> {
-    assert!(krig_mat.shape()[0] == krig_mat.shape()[1]);
-    assert!(krig_mat.shape()[0] == krig_vecs.shape()[0]);
-    assert!(krig_mat.shape()[0] == cond.shape()[0]);
+    assert_eq!(krig_mat.dim().0, krig_mat.dim().1);
+    assert_eq!(krig_mat.dim().0, krig_vecs.dim().0);
+    assert_eq!(krig_mat.dim().0, cond.dim());
 
     let mut field = Array1::<f64>::zeros(krig_vecs.shape()[1]);
 
