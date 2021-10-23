@@ -280,54 +280,55 @@ pub fn variogram_directional(
         let mut variogram = Array2::<f64>::zeros(out_size);
         let mut counts = Array2::<u64>::zeros(out_size);
 
-        Zip::from(bin_edges.windows(2))
+        Zip::from(bin_edges.slice(s![..out_size.1]))
+            .and(bin_edges.slice(s![1..]))
             .and(variogram.columns_mut())
             .and(counts.columns_mut())
-            .par_for_each(|bin_edges, mut variogram, mut counts| {
-                let lower_bin_edge = bin_edges[0];
-                let upper_bin_edge = bin_edges[1];
+            .par_for_each(
+                |lower_bin_edge, upper_bin_edge, mut variogram, mut counts| {
+                    Zip::indexed(f.slice(s![.., ..in_size]).columns())
+                        .and(pos.slice(s![..dim, ..in_size]).columns())
+                        .for_each(|i, f_i, pos_i| {
+                            Zip::from(f.slice(s![.., i + 1..]).columns())
+                                .and(pos.slice(s![..dim, i + 1..]).columns())
+                                .for_each(|f_j, pos_j| {
+                                    let dist = Euclid::dist(pos_i, pos_j);
+                                    if dist < *lower_bin_edge || dist >= *upper_bin_edge {
+                                        return; //skip if not in current bin
+                                    }
 
-                Zip::indexed(f.slice(s![.., ..in_size]).columns())
-                    .and(pos.slice(s![..dim, ..in_size]).columns())
-                    .for_each(|i, f_i, pos_i| {
-                        Zip::from(f.slice(s![.., i + 1..]).columns())
-                            .and(pos.slice(s![..dim, i + 1..]).columns())
-                            .for_each(|f_j, pos_j| {
-                                let dist = Euclid::dist(pos_i, pos_j);
-                                if dist < lower_bin_edge || dist >= upper_bin_edge {
-                                    return; //skip if not in current bin
-                                }
-
-                                Zip::from(direction.slice(s![.., ..dim]).rows())
-                                    .and(&mut variogram)
-                                    .and(&mut counts)
-                                    .fold_while((), |(), dir, variogram, counts| {
-                                        if !dir_test(dir, pos_i, pos_j, dist, angles_tol, bandwidth)
-                                        {
-                                            return FoldWhile::Continue(());
-                                        }
-
-                                        Zip::from(f_i).and(f_j).for_each(|f_i, f_j| {
-                                            let f_ij = f_i - f_j;
-                                            if f_ij.is_nan() {
-                                                return; // skip no data values
+                                    Zip::from(direction.slice(s![.., ..dim]).rows())
+                                        .and(&mut variogram)
+                                        .and(&mut counts)
+                                        .fold_while((), |(), dir, variogram, counts| {
+                                            if !dir_test(
+                                                dir, pos_i, pos_j, dist, angles_tol, bandwidth,
+                                            ) {
+                                                return FoldWhile::Continue(());
                                             }
 
-                                            *counts += 1;
-                                            *variogram += E::estimate(f_ij);
+                                            Zip::from(f_i).and(f_j).for_each(|f_i, f_j| {
+                                                let f_ij = f_i - f_j;
+                                                if f_ij.is_nan() {
+                                                    return; // skip no data values
+                                                }
+
+                                                *counts += 1;
+                                                *variogram += E::estimate(f_ij);
+                                            });
+
+                                            //once we found a fitting direction
+                                            //break the search if directions are separated
+                                            if separate_dirs {
+                                                return FoldWhile::Done(());
+                                            }
+
+                                            FoldWhile::Continue(())
                                         });
-
-                                        //once we found a fitting direction
-                                        //break the search if directions are separated
-                                        if separate_dirs {
-                                            return FoldWhile::Done(());
-                                        }
-
-                                        FoldWhile::Continue(())
-                                    });
-                            });
-                    });
-            });
+                                });
+                        });
+                },
+            );
 
         E::normalize_vec(variogram.view_mut(), counts.view());
 
@@ -383,13 +384,11 @@ pub fn variogram_unstructured(
         let mut variogram = Array1::<f64>::zeros(out_size);
         let mut counts = Array1::<u64>::zeros(out_size);
 
-        Zip::from(bin_edges.windows(2))
+        Zip::from(bin_edges.slice(s![..out_size]))
+            .and(bin_edges.slice(s![1..]))
             .and(&mut variogram)
             .and(&mut counts)
-            .par_for_each(|bin_edges, variogram, counts| {
-                let lower_bin_edge = bin_edges[0];
-                let upper_bin_edge = bin_edges[1];
-
+            .par_for_each(|lower_bin_edge, upper_bin_edge, variogram, counts| {
                 Zip::indexed(f.slice(s![.., ..in_size]).columns())
                     .and(pos.slice(s![..dim, ..in_size]).columns())
                     .for_each(|i, f_i, pos_i| {
@@ -397,7 +396,7 @@ pub fn variogram_unstructured(
                             .and(pos.slice(s![..dim, i + 1..]).columns())
                             .for_each(|f_j, pos_j| {
                                 let dist = D::dist(pos_i, pos_j);
-                                if dist < lower_bin_edge || dist >= upper_bin_edge {
+                                if dist < *lower_bin_edge || dist >= *upper_bin_edge {
                                     return; //skip if not in current bin
                                 }
 
