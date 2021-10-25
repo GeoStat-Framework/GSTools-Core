@@ -537,6 +537,75 @@ mod tests {
     }
 
     #[test]
+    fn test_variogram_unstruct_multi_field() {
+        let setup1 = SetupUnstruct::new();
+        let field2 = arr2(&[[
+            1.2427955,
+            1.59811704,
+            1.57745039,
+            -1.01531904,
+            1.26474262,
+            1.53626347,
+            1.85106795,
+            0.96939178,
+            0.83650493,
+            0.23548617,
+        ]]);
+        let field_multi = arr2(&[
+            [
+                -1.2427955,
+                -0.59811704,
+                -0.57745039,
+                0.01531904,
+                -0.26474262,
+                -0.53626347,
+                -0.85106795,
+                -1.96939178,
+                -1.83650493,
+                -1.23548617,
+            ],
+            [
+                1.2427955,
+                1.59811704,
+                1.57745039,
+                -1.01531904,
+                1.26474262,
+                1.53626347,
+                1.85106795,
+                0.96939178,
+                0.83650493,
+                0.23548617,
+            ],
+        ]);
+        let (gamma, _) = variogram_unstructured(
+            2,
+            setup1.field.view(),
+            setup1.bin_edges.view(),
+            setup1.pos.view(),
+            'm',
+            'e',
+        );
+        let (gamma2, _) = variogram_unstructured(
+            2,
+            field2.view(),
+            setup1.bin_edges.view(),
+            setup1.pos.view(),
+            'm',
+            'e',
+        );
+        let (gamma_multi, _) = variogram_unstructured(
+            2,
+            field_multi.view(),
+            setup1.bin_edges.view(),
+            setup1.pos.view(),
+            'm',
+            'e',
+        );
+        let gamma_single = 0.5 * (&gamma + &gamma2);
+        assert_ulps_eq!(gamma_multi, gamma_single, max_ulps = 6,);
+    }
+
+    #[test]
     fn test_variogram_directional() {
         let setup = SetupUnstruct::new();
         let direction = arr2(&[[0., std::f64::consts::PI], [0., 0.]]);
