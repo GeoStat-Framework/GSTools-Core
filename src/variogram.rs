@@ -538,7 +538,7 @@ mod tests {
 
     #[test]
     fn test_variogram_unstruct_multi_field() {
-        let setup1 = SetupUnstruct::new();
+        let setup = SetupUnstruct::new();
         let field2 = arr2(&[[
             1.2427955,
             1.59811704,
@@ -579,28 +579,66 @@ mod tests {
         ]);
         let (gamma, _) = variogram_unstructured(
             2,
-            setup1.field.view(),
-            setup1.bin_edges.view(),
-            setup1.pos.view(),
+            setup.field.view(),
+            setup.bin_edges.view(),
+            setup.pos.view(),
             'm',
             'e',
         );
         let (gamma2, _) = variogram_unstructured(
             2,
             field2.view(),
-            setup1.bin_edges.view(),
-            setup1.pos.view(),
+            setup.bin_edges.view(),
+            setup.pos.view(),
             'm',
             'e',
         );
         let (gamma_multi, _) = variogram_unstructured(
             2,
             field_multi.view(),
-            setup1.bin_edges.view(),
-            setup1.pos.view(),
+            setup.bin_edges.view(),
+            setup.pos.view(),
             'm',
             'e',
         );
+        let gamma_single = 0.5 * (&gamma + &gamma2);
+        assert_ulps_eq!(gamma_multi, gamma_single, max_ulps = 6,);
+
+        let direction = arr2(&[[0., std::f64::consts::PI], [0., 0.]]);
+        let (gamma, _) = variogram_directional(
+            2,
+            setup.field.view(),
+            setup.bin_edges.view(),
+            setup.pos.view(),
+            direction.view(),
+            std::f64::consts::PI / 8.,
+            -1.0,
+            false,
+            'm',
+        );
+        let (gamma2, _) = variogram_directional(
+            2,
+            field2.view(),
+            setup.bin_edges.view(),
+            setup.pos.view(),
+            direction.view(),
+            std::f64::consts::PI / 8.,
+            -1.0,
+            false,
+            'm',
+        );
+        let (gamma_multi, _) = variogram_directional(
+            2,
+            field_multi.view(),
+            setup.bin_edges.view(),
+            setup.pos.view(),
+            direction.view(),
+            std::f64::consts::PI / 8.,
+            -1.0,
+            false,
+            'm',
+        );
+
         let gamma_single = 0.5 * (&gamma + &gamma2);
         assert_ulps_eq!(gamma_multi, gamma_single, max_ulps = 6,);
     }
