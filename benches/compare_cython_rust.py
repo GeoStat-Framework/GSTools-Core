@@ -23,12 +23,12 @@ if __name__ == '__main__':
 
     ##########################################################################
 
-    x = np.loadtxt(path / 'field_vs_x.txt')
-    y = np.loadtxt(path / 'field_vs_y.txt')
-    z = np.loadtxt(path / 'field_vs_z.txt')
-    cov_samples = np.loadtxt(path / 'field_vs_cov_samples.txt')
-    z_1 = np.loadtxt(path / 'field_vs_z_1.txt')
-    z_2 = np.loadtxt(path / 'field_vs_z_2.txt')
+    x = np.loadtxt(path / 'field_x.txt')
+    y = np.loadtxt(path / 'field_y.txt')
+    z = np.loadtxt(path / 'field_z.txt')
+    cov_samples = np.loadtxt(path / 'field_cov_samples.txt')
+    z_1 = np.loadtxt(path / 'field_z_1.txt')
+    z_2 = np.loadtxt(path / 'field_z_2.txt')
     pos = np.array((x, y, z))
 
     print(f'SUMMATE')
@@ -55,9 +55,9 @@ if __name__ == '__main__':
 
     ##########################################################################
 
-    krige_mat = np.loadtxt(path / 'krige_vs_krige_mat.txt')
-    k_vec = np.loadtxt(path / 'krige_vs_k_vec.txt')
-    krige_cond = np.loadtxt(path / 'krige_vs_krige_cond.txt')
+    krige_mat = np.loadtxt(path / 'krige_krige_mat.txt')
+    k_vec = np.loadtxt(path / 'krige_k_vec.txt')
+    krige_cond = np.loadtxt(path / 'krige_krige_cond.txt')
 
     print(f'KRIGE_AND_VAR')
     print(f'\tCYTHON IMPLEMENTATION')
