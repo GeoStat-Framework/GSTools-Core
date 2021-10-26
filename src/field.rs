@@ -41,56 +41,7 @@ pub fn summator_incompr(
     assert_eq!(cov_samples.dim().1, z1.dim());
     assert_eq!(cov_samples.dim().1, z2.dim());
 
-    fn inner(
-        cov_samples: ArrayView2<'_, f64>,
-        z1: ArrayView1<'_, f64>,
-        z2: ArrayView1<'_, f64>,
-        pos: ArrayView2<'_, f64>,
-    ) -> Array2<f64> {
-        // unit vector in x dir.
-        let mut e1 = Array1::<f64>::zeros(pos.dim().0);
-        e1[0] = 1.0;
-
-        // FIXME: Use Zip::from(cov_samples.columns()).and(z1).and(z1) after
-        // https://github.com/rust-ndarray/ndarray/pull/1081 is merged.
-        cov_samples
-            .axis_iter(Axis(1))
-            .into_par_iter()
-            .zip(z1.axis_iter(Axis(0)))
-            .zip(z2.axis_iter(Axis(0)))
-            .with_min_len(100)
-            .fold(
-                || Array2::<f64>::zeros(pos.dim()),
-                |mut summed_modes, ((cov_samples, z1), z2)| {
-                    let k_2 = cov_samples[0] / cov_samples.dot(&cov_samples);
-                    let z1 = z1.into_scalar();
-                    let z2 = z2.into_scalar();
-
-                    Zip::from(pos.columns())
-                        .and(summed_modes.columns_mut())
-                        .par_for_each(|pos, mut summed_modes| {
-                            let phase = cov_samples.dot(&pos);
-                            let z12 = z1 * phase.cos() + z2 * phase.sin();
-
-                            Zip::from(&mut summed_modes)
-                                .and(&e1)
-                                .and(cov_samples)
-                                .for_each(|sum, e1, cs| {
-                                    *sum += (*e1 - cs * k_2) * z12;
-                                });
-                        });
-
-                    summed_modes
-                },
-            )
-            .reduce_with(|mut lhs, rhs| {
-                lhs += &rhs;
-                lhs
-            })
-            .unwrap()
-    }
-
-    fn inner_short_vec<const N: usize>(
+    fn inner<const N: usize>(
         cov_samples: ArrayView2<'_, f64>,
         z1: ArrayView1<'_, f64>,
         z2: ArrayView1<'_, f64>,
@@ -145,7 +96,7 @@ pub fn summator_incompr(
             (pos.len(), N),
             summed_modes
                 .into_iter()
-                .flat_map(IntoIterator::into_iter)
+                .flat_map(ShortVec::<N>::into_iter)
                 .collect(),
         )
         .unwrap()
@@ -153,9 +104,9 @@ pub fn summator_incompr(
     }
 
     match pos.dim().0 {
-        2 => inner_short_vec::<2>(cov_samples, z1, z2, pos),
-        3 => inner_short_vec::<3>(cov_samples, z1, z2, pos),
-        _ => inner(cov_samples, z1, z2, pos),
+        2 => inner::<2>(cov_samples, z1, z2, pos),
+        3 => inner::<3>(cov_samples, z1, z2, pos),
+        _ => panic!("Only two- and three-dimensional problems are supported."),
     }
 }
 
