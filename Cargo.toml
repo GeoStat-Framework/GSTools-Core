@@ -1,6 +1,6 @@
 [package]
 name = "gstools-core"
-version = "0.1.0"
+version = "0.1.2"
 authors = ["Lennart Schüler <mostem@posteo.de>"]
 edition = "2018"
 description = "The core functions of GSTools"
