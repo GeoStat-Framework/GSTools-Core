@@ -108,7 +108,6 @@ fn gstools_core(_py: Python<'_>, m: &PyModule) -> PyResult<()> {
     #[allow(clippy::too_many_arguments)]
     fn variogram_directional_py<'py>(
         py: Python<'py>,
-        dim: usize,
         f: PyReadonlyArray2<f64>,
         bin_edges: PyReadonlyArray1<f64>,
         pos: PyReadonlyArray2<f64>,
@@ -127,7 +126,6 @@ fn gstools_core(_py: Python<'_>, m: &PyModule) -> PyResult<()> {
         let separate_dirs = separate_dirs.unwrap_or(false);
         let estimator_type = estimator_type.unwrap_or('m');
         let (variogram, counts) = variogram_directional(
-            dim,
             f,
             bin_edges,
             pos,
@@ -147,7 +145,6 @@ fn gstools_core(_py: Python<'_>, m: &PyModule) -> PyResult<()> {
     #[pyo3(name = "variogram_unstructured")]
     fn variogram_unstructured_py<'py>(
         py: Python<'py>,
-        dim: usize,
         f: PyReadonlyArray2<f64>,
         bin_edges: PyReadonlyArray1<f64>,
         pos: PyReadonlyArray2<f64>,
@@ -160,7 +157,7 @@ fn gstools_core(_py: Python<'_>, m: &PyModule) -> PyResult<()> {
         let estimator_type = estimator_type.unwrap_or('m');
         let distance_type = distance_type.unwrap_or('e');
         let (variogram, counts) =
-            variogram_unstructured(dim, f, bin_edges, pos, estimator_type, distance_type);
+            variogram_unstructured(f, bin_edges, pos, estimator_type, distance_type);
         let variogram = variogram.into_pyarray(py);
         let counts = counts.into_pyarray(py);
 

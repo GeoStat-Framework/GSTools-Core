@@ -238,7 +238,6 @@ fn dir_test(
 
 #[allow(clippy::too_many_arguments)]
 pub fn variogram_directional(
-    dim: usize,
     f: ArrayView2<'_, f64>,
     bin_edges: ArrayView1<'_, f64>,
     pos: ArrayView2<'_, f64>,
@@ -248,8 +247,16 @@ pub fn variogram_directional(
     separate_dirs: bool,
     estimator_type: char,
 ) -> (Array2<f64>, Array2<u64>) {
-    assert!(
-        pos.dim().1 == f.dim().1,
+    assert_eq!(
+        pos.dim().0,
+        direction.dim().1,
+        "dim(pos) = {} != dim(direction) = {}",
+        pos.dim().0,
+        direction.dim().1,
+    );
+    assert_eq!(
+        pos.dim().1,
+        f.dim().1,
         "len(pos) = {} != len(f) = {}",
         pos.dim().1,
         f.dim().1,
@@ -265,7 +272,6 @@ pub fn variogram_directional(
     );
 
     fn inner<E: Estimator>(
-        dim: usize,
         f: ArrayView2<'_, f64>,
         bin_edges: ArrayView1<'_, f64>,
         pos: ArrayView2<'_, f64>,
@@ -287,17 +293,17 @@ pub fn variogram_directional(
             .par_for_each(
                 |lower_bin_edge, upper_bin_edge, mut variogram, mut counts| {
                     Zip::indexed(f.slice(s![.., ..in_size]).columns())
-                        .and(pos.slice(s![..dim, ..in_size]).columns())
+                        .and(pos.slice(s![.., ..in_size]).columns())
                         .for_each(|i, f_i, pos_i| {
                             Zip::from(f.slice(s![.., i + 1..]).columns())
-                                .and(pos.slice(s![..dim, i + 1..]).columns())
+                                .and(pos.slice(s![.., i + 1..]).columns())
                                 .for_each(|f_j, pos_j| {
                                     let dist = Euclid::dist(pos_i, pos_j);
                                     if dist < *lower_bin_edge || dist >= *upper_bin_edge {
                                         return; //skip if not in current bin
                                     }
 
-                                    Zip::from(direction.slice(s![.., ..dim]).rows())
+                                    Zip::from(direction.rows())
                                         .and(&mut variogram)
                                         .and(&mut counts)
                                         .fold_while((), |(), dir, variogram, counts| {
@@ -337,7 +343,6 @@ pub fn variogram_directional(
 
     choose_estimator!(estimator_type => E: {
         inner::<E>(
-            dim,
             f,
             bin_edges,
             pos,
@@ -350,7 +355,6 @@ pub fn variogram_directional(
 }
 
 pub fn variogram_unstructured(
-    dim: usize,
     f: ArrayView2<'_, f64>,
     bin_edges: ArrayView1<'_, f64>,
     pos: ArrayView2<'_, f64>,
@@ -371,12 +375,11 @@ pub fn variogram_unstructured(
     );
 
     fn inner<E: Estimator, D: Distance>(
-        dim: usize,
         f: ArrayView2<'_, f64>,
         bin_edges: ArrayView1<'_, f64>,
         pos: ArrayView2<'_, f64>,
     ) -> (Array1<f64>, Array1<u64>) {
-        D::check_dim(dim);
+        D::check_dim(pos.dim().0);
 
         let out_size = bin_edges.dim() - 1;
         let in_size = pos.dim().1 - 1;
@@ -390,10 +393,10 @@ pub fn variogram_unstructured(
             .and(&mut counts)
             .par_for_each(|lower_bin_edge, upper_bin_edge, variogram, counts| {
                 Zip::indexed(f.slice(s![.., ..in_size]).columns())
-                    .and(pos.slice(s![..dim, ..in_size]).columns())
+                    .and(pos.slice(s![.., ..in_size]).columns())
                     .for_each(|i, f_i, pos_i| {
                         Zip::from(f.slice(s![.., i + 1..]).columns())
-                            .and(pos.slice(s![..dim, i + 1..]).columns())
+                            .and(pos.slice(s![.., i + 1..]).columns())
                             .for_each(|f_j, pos_j| {
                                 let dist = D::dist(pos_i, pos_j);
                                 if dist < *lower_bin_edge || dist >= *upper_bin_edge {
@@ -420,7 +423,7 @@ pub fn variogram_unstructured(
 
     choose_estimator!(estimator_type => E: {
         choose_distance!(distance_type => D: {
-            inner::<E, D>(dim, f, bin_edges, pos)
+            inner::<E, D>(f, bin_edges, pos)
         })
     })
 }
@@ -574,7 +577,6 @@ mod tests {
     fn test_variogram_unstruct() {
         let setup = SetupUnstruct::new();
         let (gamma, cnts) = variogram_unstructured(
-            2,
             setup.field.view(),
             setup.bin_edges.view(),
             setup.pos.view(),
@@ -631,7 +633,6 @@ mod tests {
             ],
         ]);
         let (gamma, _) = variogram_unstructured(
-            2,
             setup.field.view(),
             setup.bin_edges.view(),
             setup.pos.view(),
@@ -639,7 +640,6 @@ mod tests {
             'e',
         );
         let (gamma2, _) = variogram_unstructured(
-            2,
             field2.view(),
             setup.bin_edges.view(),
             setup.pos.view(),
@@ -647,7 +647,6 @@ mod tests {
             'e',
         );
         let (gamma_multi, _) = variogram_unstructured(
-            2,
             field_multi.view(),
             setup.bin_edges.view(),
             setup.pos.view(),
@@ -659,7 +658,6 @@ mod tests {
 
         let direction = arr2(&[[0., std::f64::consts::PI], [0., 0.]]);
         let (gamma, _) = variogram_directional(
-            2,
             setup.field.view(),
             setup.bin_edges.view(),
             setup.pos.view(),
@@ -670,7 +668,6 @@ mod tests {
             'm',
         );
         let (gamma2, _) = variogram_directional(
-            2,
             field2.view(),
             setup.bin_edges.view(),
             setup.pos.view(),
@@ -681,7 +678,6 @@ mod tests {
             'm',
         );
         let (gamma_multi, _) = variogram_directional(
-            2,
             field_multi.view(),
             setup.bin_edges.view(),
             setup.pos.view(),
@@ -701,7 +697,6 @@ mod tests {
         let setup = SetupUnstruct::new();
         let direction = arr2(&[[0., std::f64::consts::PI], [0., 0.]]);
         let (gamma, cnts) = variogram_directional(
-            2,
             setup.field.view(),
             setup.bin_edges.view(),
             setup.pos.view(),
