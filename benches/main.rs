@@ -115,7 +115,6 @@ pub fn variogram_benchmark(c: &mut Criterion) {
     c.bench_function("variogram unstructured", |b| {
         b.iter(|| {
             variogram_unstructured(
-                2,
                 black_box(f.view()),
                 black_box(bin_edges.view()),
                 black_box(pos.view()),
@@ -130,7 +129,6 @@ pub fn variogram_benchmark(c: &mut Criterion) {
     c.bench_function("variogram directional", |b| {
         b.iter(|| {
             variogram_directional(
-                2,
                 black_box(f.view()),
                 black_box(bin_edges.view()),
                 black_box(pos.view()),
