@@ -216,7 +216,7 @@ fn dir_test(
             })
             .sqrt();
 
-        if b_dist.sqrt() >= bandwidth {
+        if b_dist >= bandwidth {
             return false;
         }
     }
