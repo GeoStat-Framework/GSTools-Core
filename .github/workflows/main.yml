@@ -171,16 +171,16 @@ jobs:
         if: github.ref == 'refs/heads/main'
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
-          user: LSchueler
-          password: ${{ secrets.TEST_PYPI_PASSWORD }}
+          user: __token__
+          password: ${{ secrets.test_pypi_password }}
           repository_url: https://test.pypi.org/legacy/
           skip_existing: true
       - name: Publish on PyPI
         if: startsWith(github.ref, 'refs/tags')
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
-          user: LSchueler
-          password: ${{ secrets.PYPI_PASSWORD }}
+          user: __token__
+          password: ${{ secrets.test_pypi_password }}
 
   #This will probably never be needed, but who knows...
   #publish_on_crates:
