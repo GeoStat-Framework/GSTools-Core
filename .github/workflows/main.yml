@@ -64,7 +64,7 @@ jobs:
           target: x86_64
           manylinux: auto
           #args: -i python${{ matrix.python-version }} --release --out dist --no-sdist
-          args: --release --out dist
+          args: --release --out dist --no-sdist
       - name: Upload Wheels Artifacts
         uses: actions/upload-artifact@v2
         with:
@@ -94,7 +94,7 @@ jobs:
         uses: messense/maturin-action@v1
         with:
           target: x64
-          args: --release --out dist
+          args: --release --out dist --no-sdist
       - name: Upload Wheels Artifacts
         uses: actions/upload-artifact@v2
         with:
@@ -124,7 +124,7 @@ jobs:
         uses: messense/maturin-action@v1
         with:
           target: x86_64
-          args: --release --out dist
+          args: --release --out dist --no-sdist
       - name: Upload Wheels Artifacts
         uses: actions/upload-artifact@v2
         with:
