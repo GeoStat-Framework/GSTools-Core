@@ -61,12 +61,11 @@ jobs:
       - name: Install built wheel
         if: matrix.target == 'x86_64'
         run: |
-          pip install gstools-core --no-index --find-links dist --force-reinstall
+          pip install dist/gstools_core*.whl --force-reinstall
           python -c "import gstools_core"
       - name: Upload Wheels Artifacts
         uses: actions/upload-artifact@v2
         with:
-          name: wheels
           path: dist
 
   windows:
@@ -94,12 +93,11 @@ jobs:
           args: --release --out dist --no-sdist
       - name: Install built wheel
         run: |
-          pip install gstools-core --no-index --find-links dist --force-reinstall
+          pip install dist/gstools_core*.whl --force-reinstall
           python -c "import gstools_core"
       - name: Upload Wheels Artifacts
         uses: actions/upload-artifact@v2
         with:
-          name: wheels
           path: dist
 
   macos:
@@ -124,7 +122,7 @@ jobs:
           args: --release --out dist --no-sdist
       - name: Install built wheel - x86_64
         run: |
-          pip install gstools-core --no-index --find-links dist --force-reinstall
+          pip install dist/gstools_core*.whl --force-reinstall
           python -c "import gstools_core"
       - name: Build wheels - universal2
         uses: messense/maturin-action@v1
@@ -132,41 +130,57 @@ jobs:
           args: --release --universal2 --out dist --no-sdist
       - name: Install built wheel - universal2
         run: |
-          pip install gstools-core --no-index --find-links dist --force-reinstall
+          pip install dist/gstools_core*.whl --force-reinstall
           python -c "import gstools_core"
       - name: Upload wheels
         uses: actions/upload-artifact@v2
         with:
-          name: wheels
+          path: dist
+
+  sdist:
+    needs: [check]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions/setup-python@v2
+        with:
+          python-version: 3.9
+          architecture: x64
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install build
+      - name: Build sdist
+        run: |
+          # PEP 517 package builder from pypa
+          python -m build --sdist
+      - uses: actions/upload-artifact@v2
+        with:
           path: dist
 
   publish_on_pypi:
     name: Publish
-    needs: [linux, windows, macos]
+    needs: [linux, windows, macos, sdist]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/download-artifact@v2
         with:
-          name: wheels
-      - uses: actions/setup-python@v2
-        with:
-          python-version: 3.9
+          name: artifact
+          path: dist
       - name: Publish on TestPyPI
-        if: github.ref == 'refs/head/main'
-        env:
-          TWINE_USERNAME: LSchueler
-          TWINE_PASSWORD: ${{ secrets.TEST_PYPI_PASSWORD }}
-        run: |
-          pip install --upgrade twine
-          twine upload --repository testpypi --skip-existing *
+        if: github.ref == 'refs/heads/main'
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          user: LSchueler
+          password: ${{ secrets.TEST_PYPI_PASSWORD }}
+          repository_url: https://test.pypi.org/legacy/
+          skip_existing: true
       - name: Publish on PyPI
         if: startsWith(github.ref, 'refs/tags')
-        env:
-          TWINE_USERNAME: LSchueler
-          TWINE_PASSWORD: ${{ secrets.PYPI_PASSWORD }}
-        run: |
-          pip install --upgrade twine
-          twine upload --skip-existing *
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          user: LSchueler
+          password: ${{ secrets.PYPI_PASSWORD }}
 
   #This will probably never be needed, but who knows...
   #publish_on_crates:
