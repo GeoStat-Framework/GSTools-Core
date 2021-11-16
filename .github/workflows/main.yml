@@ -139,7 +139,7 @@ jobs:
 
   publish_on_pypi:
     name: Publish
-    needs: [build_for_linux, build_for_macos, build_for_windows]
+    needs: [linux, windows, macos]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/download-artifact@v2
