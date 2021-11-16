@@ -8,6 +8,7 @@ readme = "README.md"
 homepage = "https://geostat-framework.org/#gstools"
 repository = "https://github.com/GeoStat-Framework/GSTools-Core"
 license = "LGPL-3.0-or-later"
+exclude = ["dist/"]
 
 [lib]
 name = "gstools_core"
