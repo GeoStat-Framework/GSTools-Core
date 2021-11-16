@@ -1,0 +1,33 @@
+[project]
+name = "gstools-core"
+dependencies = ["numpy>=1.14.5,<2"]
+license = { file = "LICENSE" }
+requires-python = ">=3.6"
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Intended Audience :: Developers",
+  "Intended Audience :: End Users/Desktop",
+  "Intended Audience :: Science/Research",
+  "License :: OSI Approved :: GNU Lesser General Public License v3 (LGPLv3)",
+  "Natural Language :: English",
+  "Programming Language :: Python",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3 :: Only",
+  "Programming Language :: Python :: 3.6",
+  "Programming Language :: Python :: 3.7",
+  "Programming Language :: Python :: 3.8",
+  "Programming Language :: Python :: 3.9",
+  "Topic :: Scientific/Engineering",
+  "Topic :: Utilities",
+]
+
+[project.urls]
+Homepage = "https://geostat-framework.org/#gstools"
+Documentation = "https://github.com/GeoStat-Framework/GSTools-Core"
+Source = "https://github.com/GeoStat-Framework/GSTools-Core"
+Changelog = "https://github.com/GeoStat-Framework/GSTools-Core/commits"
+Tracker = "https://github.com/GeoStat-Framework/GSTools-Core/issues"
+
+[build-system]
+requires = ["maturin>=0.11,<0.12"]
+build-backend = "maturin"
