@@ -26,7 +26,7 @@ lto = true
 codegen-units = 1
 
 [dependencies]
-pyo3 = { version = "0.14", features = ["extension-module"] }
+pyo3 = { version = "0.14", features = ["abi3-py36", "extension-module"] }
 numpy = "0.14.1"
 ndarray = { version = "0.15", features = ["rayon", "approx"] }
 rayon = "1.5.1"
