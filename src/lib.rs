@@ -14,6 +14,8 @@ pub mod variogram;
 
 #[pymodule]
 fn gstools_core(_py: Python<'_>, m: &PyModule) -> PyResult<()> {
+    m.add("__version__", env!("CARGO_PKG_VERSION"))?;
+
     #[pyfn(m)]
     #[pyo3(name = "summate")]
     fn summate_py<'py>(
