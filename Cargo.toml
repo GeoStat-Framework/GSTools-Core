@@ -7,7 +7,10 @@ description = "The core functions of GSTools"
 readme = "README.md"
 homepage = "https://geostat-framework.org/#gstools"
 repository = "https://github.com/GeoStat-Framework/GSTools-Core"
+documentation = "https://docs.rs/gstools-core"
 license = "LGPL-3.0-or-later"
+categories = ["science", "mathematics"]
+keywords = ["geostatistics", "srf", "kriging", "variogram", "python"]
 exclude = ["dist/", ".*"]
 
 [lib]
