@@ -1,3 +1,5 @@
+//! Estimate empirical variograms.
+
 use ndarray::{
     s, Array1, Array2, ArrayView1, ArrayView2, ArrayViewMut1, ArrayViewMut2, FoldWhile, Zip,
 };
@@ -120,6 +122,7 @@ impl Distance for Haversine {
     }
 }
 
+/// Variogram estimation on a structured grid.
 pub fn variogram_structured(f: ArrayView2<'_, f64>, estimator_type: char) -> Array1<f64> {
     fn inner<E: Estimator>(f: ArrayView2<'_, f64>) -> Array1<f64> {
         let size = f.dim().0;
@@ -148,6 +151,7 @@ pub fn variogram_structured(f: ArrayView2<'_, f64>, estimator_type: char) -> Arr
     })
 }
 
+/// Variogram estimation of a masked field on a structured grid.
 pub fn variogram_ma_structured(
     f: ArrayView2<'_, f64>,
     mask: ArrayView2<'_, bool>,
@@ -236,6 +240,7 @@ fn dir_test(
     true
 }
 
+/// Directional variogram estimation on an unstructured grid.
 #[allow(clippy::too_many_arguments)]
 pub fn variogram_directional(
     f: ArrayView2<'_, f64>,
@@ -354,6 +359,7 @@ pub fn variogram_directional(
     })
 }
 
+/// Variogram estimation on an unstructured grid.
 pub fn variogram_unstructured(
     f: ArrayView2<'_, f64>,
     bin_edges: ArrayView1<'_, f64>,

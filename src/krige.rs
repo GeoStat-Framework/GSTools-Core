@@ -1,6 +1,9 @@
+//! Perform the kriging matrix operations.
+
 use ndarray::{Array1, ArrayView1, ArrayView2, Zip};
 use rayon::prelude::*;
 
+/// Calculate the interpolated field and also return the variance.
 pub fn calculator_field_krige_and_variance(
     krig_mat: ArrayView2<'_, f64>,
     krig_vecs: ArrayView2<'_, f64>,
@@ -46,6 +49,7 @@ pub fn calculator_field_krige_and_variance(
     (field, error)
 }
 
+/// Calculate the interpolated field.
 pub fn calculator_field_krige(
     krig_mat: ArrayView2<'_, f64>,
     krig_vecs: ArrayView2<'_, f64>,

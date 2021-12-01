@@ -1,3 +1,17 @@
+//! GSTools-Core
+//!
+//! `gstools_core` is a Rust implementation of the core algorithms of [GSTools].
+//! At the moment, it is a drop in replacement for the Cython code included in GSTools.
+//!
+//! This crate includes
+//! - [randomization methods](field) for the random field generation
+//! - the [matrix operations](krige) of the kriging methods
+//! - the [variogram estimation](variogram)
+//!
+//! [GSTools]: https://github.com/GeoStat-Framework/GSTools
+
+#![warn(missing_docs)]
+
 use numpy::{IntoPyArray, PyArray1, PyArray2, PyReadonlyArray1, PyReadonlyArray2};
 use pyo3::prelude::{pymodule, PyModule, PyResult, Python};
 

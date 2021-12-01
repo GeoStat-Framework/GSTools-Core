@@ -1,8 +1,11 @@
+//! Compute the randomization methods for random field generations.
+
 use ndarray::{Array1, Array2, ArrayView1, ArrayView2, Axis, Zip};
 use rayon::prelude::*;
 
 use crate::short_vec::ShortVec;
 
+/// The randomization method for scalar fields.
 pub fn summator(
     cov_samples: ArrayView2<'_, f64>,
     z1: ArrayView1<'_, f64>,
@@ -31,6 +34,7 @@ pub fn summator(
     summed_modes
 }
 
+/// The randomization method for vector fields.
 pub fn summator_incompr(
     cov_samples: ArrayView2<'_, f64>,
     z1: ArrayView1<'_, f64>,
