@@ -21,18 +21,18 @@ use crate::short_vec::ShortVec;
 /// # Arguments
 ///
 /// * `cov_samples` - the samples from the spectral density distribution of the covariance model
-/// <br>dim = (spatial dim. of field $d$, Fourier modes $N$)
+/// <br>&nbsp;&nbsp;&nbsp;&nbsp; dim = (spatial dim. of field $d$, Fourier modes $N$)
 /// * `z1` - independent samples from a standard normal distribution
-/// <br>dim = Fourier modes $N$
+/// <br>&nbsp;&nbsp;&nbsp;&nbsp;dim = Fourier modes $N$
 /// * `z2` - independent samples from a standard normal distribution
-/// <br>dim = Fourier modes $N$
+/// <br>&nbsp;&nbsp;&nbsp;&nbsp;dim = Fourier modes $N$
 /// * `pos` - the position $x$ where the spatial random field is calculated
-/// <br>dim = (spatial dim. of field $d$, no. of spatial points where field is calculated $j$)
+/// <br>&nbsp;&nbsp;&nbsp;&nbsp;dim = (spatial dim. of field $d$, no. of spatial points where field is calculated $j$)
 ///
 /// # Returns
 ///
 /// * `summed_modes` - the isotropic spatial field
-/// <br>dim = no. of spatial points where field is calculated $j$
+/// <br>&nbsp;&nbsp;&nbsp;&nbsp;dim = no. of spatial points where field is calculated $j$
 pub fn summator(
     cov_samples: ArrayView2<'_, f64>,
     z1: ArrayView1<'_, f64>,
@@ -78,18 +78,18 @@ pub fn summator(
 /// # Arguments
 ///
 /// * `cov_samples` - the samples from the spectral density distribution of the covariance model
-/// <br>dim = (spatial dim. of field $d$, Fourier modes $N$)
+/// <br>&nbsp;&nbsp;&nbsp;&nbsp;dim = (spatial dim. of field $d$, Fourier modes $N$)
 /// * `z1` - independent samples from a standard normal distribution
-/// <br>dim = Fourier modes $N$
+/// <br>&nbsp;&nbsp;&nbsp;&nbsp;dim = Fourier modes $N$
 /// * `z2` - independent samples from a standard normal distribution
-/// <br>dim = Fourier modes $N$
+/// <br>&nbsp;&nbsp;&nbsp;&nbsp;dim = Fourier modes $N$
 /// * `pos` - the position $x$ where the spatial random field is calculated
-/// <br>dim = (spatial dim. of field $d$, no. of spatial points where field is calculated $j$)
+/// <br>&nbsp;&nbsp;&nbsp;&nbsp;dim = (spatial dim. of field $d$, no. of spatial points where field is calculated $j$)
 ///
 /// # Returns
 ///
 /// * `summed_modes` - the isotropic incompressible spatial field
-/// <br>dim = (spatial dim. of field $d$, no. of spatial points where field is calculated $j$)
+/// <br>&nbsp;&nbsp;&nbsp;&nbsp;dim = (spatial dim. of field $d$, no. of spatial points where field is calculated $j$)
 pub fn summator_incompr(
     cov_samples: ArrayView2<'_, f64>,
     z1: ArrayView1<'_, f64>,
