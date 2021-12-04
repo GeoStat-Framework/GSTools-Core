@@ -1,4 +1,17 @@
 //! Estimate empirical variograms.
+//!
+//! Calculate the empirical variogram according to
+//! $$
+//! \gamma(r_k) = \frac{1}{2N(r_k)} \sum_{i=1}^{N(r_k)}(f(x_i) - f(x_i^\prime))^2
+//! $$
+//! with
+//! * $r_k \leq \lVert x_i - x_i^\prime \rVert < r_{k+1}$ being the bins
+//! * $N(r_k)$ being the number of points in bin $r_k$
+//!
+//! If the estimator type 'c' for Cressie was chosen, the variogram is calculated by
+//! $$
+//! \gamma(r_k) = \frac{\frac{1}{2} \left( \frac{1}{N(r_k)} \sum_{i=1}^{N(r_k)}|f(x_i) - f(x_i^\prime)|^{0.5}\right)^4}{0.457 + 0.494 / N(r_k) + 0.045 / N^2(r_k)}
+//! $$
 
 use ndarray::{
     s, Array1, Array2, ArrayView1, ArrayView2, ArrayViewMut1, ArrayViewMut2, FoldWhile, Zip,
@@ -123,6 +136,15 @@ impl Distance for Haversine {
 }
 
 /// Variogram estimation on a structured grid.
+///
+/// Calculates the empirical variogram according to the equations shown in the [module documentation](crate::variogram).
+///
+/// # Arguments
+///
+/// * `f` - the spatially distributed data
+/// * `estimator_type` - the estimator function, can be
+///     * 'm' - Matheron, the standard method of moments by Matheron
+///     * 'c' - Cressie, an estimator more robust to outliers
 pub fn variogram_structured(f: ArrayView2<'_, f64>, estimator_type: char) -> Array1<f64> {
     fn inner<E: Estimator>(f: ArrayView2<'_, f64>) -> Array1<f64> {
         let size = f.dim().0;
@@ -152,6 +174,16 @@ pub fn variogram_structured(f: ArrayView2<'_, f64>, estimator_type: char) -> Arr
 }
 
 /// Variogram estimation of a masked field on a structured grid.
+///
+/// Calculates the empirical variogram according to the equations shown in the [module documentation](crate::variogram).
+///
+/// # Arguments
+///
+/// * `f` - the spatially distributed data
+/// * `mask` - the mask for the data `f`
+/// * `estimator_type` - the estimator function, can be
+///     * 'm' - Matheron, the standard method of moments by Matheron
+///     * 'c' - Cressie, an estimator more robust to outliers
 pub fn variogram_ma_structured(
     f: ArrayView2<'_, f64>,
     mask: ArrayView2<'_, bool>,
@@ -241,6 +273,25 @@ fn dir_test(
 }
 
 /// Directional variogram estimation on an unstructured grid.
+///
+/// Calculates the empirical variogram according to the equations shown in the [module documentation](crate::variogram).
+///
+/// # Arguments
+///
+/// * `f` - the spatially distributed data
+/// <br>&nbsp;&nbsp;&nbsp;&nbsp; dim = (no. of data fields, no. of spatial data points per field $i$)
+/// * `bin_edges` - the bins of the variogram
+/// <br>&nbsp;&nbsp;&nbsp;&nbsp; dim = number of bins j
+/// * `pos` - the positions of the data `f`
+/// <br>&nbsp;&nbsp;&nbsp;&nbsp; dim = (spatial dim. $d$, no. of spatial data points $i$)
+/// * `direction` - directions in which the variogram will be estimated
+/// <br>&nbsp;&nbsp;&nbsp;&nbsp; dim = (no. of directions, spatial dim. $d$)
+/// * `angles_tol` - the tolerance of the angles
+/// * `bandwidth` - bandwidth to cut off the angular tolerance
+/// * `separate_dirs` - do the direction bands overlap?
+/// * `estimator_type` - the estimator function, can be
+///     * 'm' - Matheron, the standard method of moments by Matheron
+///     * 'c' - Cressie, an estimator more robust to outliers
 #[allow(clippy::too_many_arguments)]
 pub fn variogram_directional(
     f: ArrayView2<'_, f64>,
@@ -360,6 +411,23 @@ pub fn variogram_directional(
 }
 
 /// Variogram estimation on an unstructured grid.
+///
+/// Calculates the empirical variogram according to the equations shown in the [module documentation](crate::variogram).
+///
+/// # Arguments
+///
+/// * `f` - the spatially distributed data
+/// <br> dim = (no. of data fields, no. of spatial data points per field $i$)
+/// * `bin_edges` - the bins of the variogram
+/// <br> dim = number of bins j
+/// * `pos` - the positions of the data `f`
+/// <br> dim = (spatial dim. $d$, no. of spatial data points $i$)
+/// * `estimator_type` - the estimator function, can be
+///     * 'm' - Matheron, the standard method of moments by Matheron
+///     * 'c' - Cressie, an estimator more robust to outliers
+/// * `distance_type` - the distance function, can be
+///     * 'e' - Euclidean, the Euclidean distance
+///     * 'h' - Haversine, the great-circle distance
 pub fn variogram_unstructured(
     f: ArrayView2<'_, f64>,
     bin_edges: ArrayView1<'_, f64>,
