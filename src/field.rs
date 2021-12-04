@@ -6,6 +6,33 @@ use rayon::prelude::*;
 use crate::short_vec::ShortVec;
 
 /// The randomization method for scalar fields.
+///
+/// Computes the isotropic spatial random field $u(x)$ by the randomization method according to
+/// $$
+/// u(x) = \sum_{i=1}^N (z_{1,i} \cdot \cos(\langle k_i, x \rangle) +
+///     z_{2,i} \cdot \sin(\langle k_i, x \rangle))
+/// $$
+/// with
+/// * $N$ being the number of Fourier modes
+/// * $z_1, z_2$ being independent samples from a standard normal distribution
+/// * $k$ being the samples from the spectral density distribution of the covariance model
+/// and are given by the argument `cov_samples`.
+///
+/// # Arguments
+///
+/// * `cov_samples` - the samples from the spectral density distribution of the covariance model
+/// <br>dim = (spatial dim. of field $d$, Fourier modes $N$)
+/// * `z1` - independent samples from a standard normal distribution
+/// <br>dim = Fourier modes $N$
+/// * `z2` - independent samples from a standard normal distribution
+/// <br>dim = Fourier modes $N$
+/// * `pos` - the position $x$ where the spatial random field is calculated
+/// <br>dim = (spatial dim. of field $d$, no. of spatial points where field is calculated $j$)
+///
+/// # Returns
+///
+/// * `summed_modes` - the isotropic spatial field
+/// <br>dim = no. of spatial points where field is calculated $j$
 pub fn summator(
     cov_samples: ArrayView2<'_, f64>,
     z1: ArrayView1<'_, f64>,
@@ -35,6 +62,34 @@ pub fn summator(
 }
 
 /// The randomization method for vector fields.
+///
+/// Computes the isotropic incompressible spatial random field $u(x)$ by the randomization method according to
+/// $$
+/// u(x)\_i = \sum_{j=1}^N p_i(k_j) (z_{1,j} \cdot \cos(\langle k_j, x \rangle) +
+///     z_{2,j} \cdot \sin(\langle k_j, x \rangle))
+/// $$
+/// with
+/// * $N$ being the number of Fourier modes
+/// * $z_1, z_2$ being independent samples from a standard normal distribution
+/// * $k$ being the samples from the spectral density distribution of the covariance model
+/// and are given by the argument `cov_samples`.
+/// * $p_i(k_j) = e_1 - \frac{k_ik_1}{|k|^2}$ being the projector ensuring the incompressibility
+///
+/// # Arguments
+///
+/// * `cov_samples` - the samples from the spectral density distribution of the covariance model
+/// <br>dim = (spatial dim. of field $d$, Fourier modes $N$)
+/// * `z1` - independent samples from a standard normal distribution
+/// <br>dim = Fourier modes $N$
+/// * `z2` - independent samples from a standard normal distribution
+/// <br>dim = Fourier modes $N$
+/// * `pos` - the position $x$ where the spatial random field is calculated
+/// <br>dim = (spatial dim. of field $d$, no. of spatial points where field is calculated $j$)
+///
+/// # Returns
+///
+/// * `summed_modes` - the isotropic incompressible spatial field
+/// <br>dim = (spatial dim. of field $d$, no. of spatial points where field is calculated $j$)
 pub fn summator_incompr(
     cov_samples: ArrayView2<'_, f64>,
     z1: ArrayView1<'_, f64>,
