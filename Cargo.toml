@@ -2,7 +2,7 @@
 name = "gstools-core"
 version = "0.2.0"
 authors = ["Lennart Schüler <mostem@posteo.de>"]
-edition = "2018"
+edition = "2021"
 description = "The core functions of GSTools"
 readme = "README.md"
 homepage = "https://geostat-framework.org/#gstools"

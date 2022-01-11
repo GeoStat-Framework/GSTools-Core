@@ -45,7 +45,7 @@ impl<const N: usize> IntoIterator for ShortVec<N> {
     type IntoIter = IntoIter<f64, N>;
 
     fn into_iter(self) -> Self::IntoIter {
-        IntoIter::new(self.0)
+        self.0.into_iter()
     }
 }
 
