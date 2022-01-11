@@ -31,12 +31,12 @@ codegen-units = 1
 [dependencies]
 pyo3 = { version = "0.15", features = ["abi3-py36", "extension-module"] }
 numpy = "0.15"
-ndarray = { version = "0.15", features = ["rayon", "approx"] }
+ndarray = { version = "0.15", features = ["rayon", "approx-0_5"] }
 rayon = "1.5"
 
 [dev-dependencies]
 criterion = { version = "0.3", features = ["html_reports"] }
-approx = "0.4"
+approx = "0.5"
 ndarray-rand = "0.14"
 
 [[bench]]
