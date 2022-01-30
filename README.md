@@ -23,7 +23,7 @@ You can contact us via <info@geostat-framework.org>.
 
 ## License
 
-[LGPLv3][license_link] © 2022
+[LGPLv3][license_link] © 2021-2022
 
 
 [gstools_link]: https://github.com/GeoStat-Framework/GSTools
