@@ -1,5 +1,10 @@
 # GSTools Core
 
+[![PyPI version](https://img.shields.io/pypi/v/gstools-core.svg)(https://pypi.org/project/gstools-core/)
+[![Crates version](https://img.shields.io/crates/v/gstools-core.svg)(https://crates.io/crates/gstools-core)
+[![Docs](https://docs.rs/gstools-core/badge.svg)(https://docs.rs/gstools-core)
+[![Build Status](https://github.com/GeoStat-Framework/GSTools-Core/actions/workflows/main.yml/badge.svg?branch=main)](https://github.com/GeoStat-Framework/GSTools-Core/actions/workflows/main.yml)
+
 A Rust implementation of the core algorithms of [GSTools][gstools_link].
 
 This crate includes
