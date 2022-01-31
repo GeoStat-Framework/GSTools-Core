@@ -89,24 +89,16 @@ pub fn calculator_field_krige(
     assert_eq!(krig_mat.dim().0, krig_vecs.dim().0);
     assert_eq!(krig_mat.dim().0, cond.dim());
 
-    let mut field = Array1::<f64>::zeros(krig_vecs.shape()[1]);
-
-    Zip::from(field.view_mut())
-        .and(krig_vecs.columns())
-        .par_for_each(|f, v_col| {
-            let acc = Zip::from(cond)
-                .and(krig_mat.columns())
-                .into_par_iter()
-                .map(|(c, m_row)| {
-                    let krig_fac = m_row.dot(&v_col);
-                    c * krig_fac
-                })
-                .sum();
-
-            *f = acc;
-        });
-
-    field
+    Zip::from(krig_vecs.columns()).par_map_collect(|v_col| {
+        Zip::from(cond)
+            .and(krig_mat.columns())
+            .into_par_iter()
+            .map(|(c, m_row)| {
+                let krig_fac = m_row.dot(&v_col);
+                c * krig_fac
+            })
+            .sum()
+    })
 }
 
 #[cfg(test)]

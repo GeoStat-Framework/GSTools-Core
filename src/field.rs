@@ -43,22 +43,17 @@ pub fn summator(
     assert_eq!(cov_samples.dim().1, z1.dim());
     assert_eq!(cov_samples.dim().1, z2.dim());
 
-    let mut summed_modes = Array1::<f64>::zeros(pos.dim().1);
+    Zip::from(pos.columns()).par_map_collect(|pos| {
+        Zip::from(cov_samples.columns())
+            .and(z1)
+            .and(z2)
+            .fold(0.0, |sum, sample, &z1, &z2| {
+                let phase = sample.dot(&pos);
+                let z12 = z1 * phase.cos() + z2 * phase.sin();
 
-    Zip::from(&mut summed_modes)
-        .and(pos.columns())
-        .par_for_each(|sum, pos| {
-            Zip::from(cov_samples.columns())
-                .and(z1)
-                .and(z2)
-                .for_each(|sample, &z1, &z2| {
-                    let phase = sample.dot(&pos);
-
-                    *sum += z1 * phase.cos() + z2 * phase.sin();
-                })
-        });
-
-    summed_modes
+                sum + z12
+            })
+    })
 }
 
 /// The randomization method for vector fields.
