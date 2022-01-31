@@ -9,7 +9,7 @@ A Rust implementation of the core algorithms of [GSTools][gstools_link].
 
 This crate includes
 
-- randomization methods for teh random field generation
+- randomization methods for the random field generation
 - the matrix operations of the kriging methods
 - the variogram estimation
 
