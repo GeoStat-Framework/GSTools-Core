@@ -16,6 +16,7 @@
 use ndarray::{
     s, Array1, Array2, ArrayView1, ArrayView2, ArrayViewMut1, ArrayViewMut2, FoldWhile, Zip,
 };
+use rayon::iter::{IndexedParallelIterator, IntoParallelIterator, ParallelIterator};
 
 trait Estimator {
     fn estimate(f_diff: f64) -> f64;
@@ -151,22 +152,28 @@ pub fn variogram_structured(f: ArrayView2<'_, f64>, estimator_type: char) -> Arr
     fn inner<E: Estimator>(f: ArrayView2<'_, f64>) -> Array1<f64> {
         let size = f.dim().0;
 
-        let mut variogram = Array1::<f64>::zeros(size);
+        let mut variogram = Vec::new();
 
-        Zip::indexed(variogram.slice_mut(s![1..])).par_for_each(|k, variogram| {
-            let mut count = 0;
+        (0..size)
+            .into_par_iter()
+            .map(|k| {
+                let mut value = 0.0;
+                let mut count = 0;
 
-            Zip::from(f.slice(s![..size - k - 1, ..]))
-                .and(f.slice(s![k + 1.., ..]))
-                .for_each(|f_i, f_j| {
-                    *variogram += E::estimate(f_i - f_j);
-                    count += 1;
-                });
+                Zip::from(f.slice(s![..size - k, ..]))
+                    .and(f.slice(s![k.., ..]))
+                    .for_each(|f_i, f_j| {
+                        value += E::estimate(f_i - f_j);
+                        count += 1;
+                    });
 
-            E::normalize(variogram, count);
-        });
+                E::normalize(&mut value, count);
 
-        variogram
+                value
+            })
+            .collect_into_vec(&mut variogram);
+
+        Array1::from_vec(variogram)
     }
 
     choose_estimator!(estimator_type => E: {
@@ -193,28 +200,34 @@ pub fn variogram_ma_structured(
     fn inner<E: Estimator>(f: ArrayView2<'_, f64>, mask: ArrayView2<'_, bool>) -> Array1<f64> {
         let size = f.dim().0;
 
-        let mut variogram = Array1::<f64>::zeros(size);
+        let mut variogram = Vec::new();
 
-        Zip::indexed(variogram.slice_mut(s![1..])).par_for_each(|k, variogram| {
-            let mut count = 0;
+        (0..size)
+            .into_par_iter()
+            .map(|k| {
+                let mut value = 0.0;
+                let mut count = 0;
 
-            Zip::from(f.slice(s![..size - k - 1, ..]))
-                .and(f.slice(s![k + 1.., ..]))
-                .and(mask.slice(s![..size - k - 1, ..]))
-                .and(mask.slice(s![k + 1.., ..]))
-                .for_each(|f_i, f_j, m_i, m_j| {
-                    if *m_i || *m_j {
-                        return;
-                    }
+                Zip::from(f.slice(s![..size - k, ..]))
+                    .and(f.slice(s![k.., ..]))
+                    .and(mask.slice(s![..size - k, ..]))
+                    .and(mask.slice(s![k.., ..]))
+                    .for_each(|f_i, f_j, m_i, m_j| {
+                        if *m_i || *m_j {
+                            return;
+                        }
 
-                    *variogram += E::estimate(f_i - f_j);
-                    count += 1;
-                });
+                        value += E::estimate(f_i - f_j);
+                        count += 1;
+                    });
 
-            E::normalize(variogram, count);
-        });
+                E::normalize(&mut value, count);
 
-        variogram
+                value
+            })
+            .collect_into_vec(&mut variogram);
+
+        Array1::from_vec(variogram)
     }
 
     choose_estimator!(estimator_type => E: {
