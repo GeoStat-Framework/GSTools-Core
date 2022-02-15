@@ -13,28 +13,12 @@
 //! \gamma(r_k) = \frac{\frac{1}{2} \left( \frac{1}{N(r_k)} \sum_{i=1}^{N(r_k)}|f(x_i) - f(x_i^\prime)|^{0.5}\right)^4}{0.457 + 0.494 / N(r_k) + 0.045 / N^2(r_k)}
 //! $$
 
-use ndarray::{
-    s, Array1, Array2, ArrayView1, ArrayView2, ArrayViewMut1, ArrayViewMut2, FoldWhile, Zip,
-};
+use ndarray::{s, Array1, Array2, ArrayView1, ArrayView2, FoldWhile, Zip};
 use rayon::iter::{IndexedParallelIterator, IntoParallelIterator, ParallelIterator};
 
 trait Estimator {
     fn estimate(f_diff: f64) -> f64;
     fn normalize(v: &mut f64, c: u64);
-
-    fn normalize_vec(variogram: ArrayViewMut1<f64>, counts: ArrayView1<u64>) {
-        Zip::from(variogram).and(counts).for_each(|v, c| {
-            Self::normalize(v, *c);
-        });
-    }
-
-    fn normalize_mat(mut variogram: ArrayViewMut2<f64>, counts: ArrayView2<u64>) {
-        Zip::from(variogram.rows_mut())
-            .and(counts.rows())
-            .par_for_each(|variogram, counts| {
-                Self::normalize_vec(variogram, counts);
-            });
-    }
 }
 
 macro_rules! choose_estimator {
@@ -402,10 +386,14 @@ pub fn variogram_directional(
                                         });
                                 });
                         });
+
+                    Zip::from(variogram)
+                        .and(counts)
+                        .for_each(|variogram, counts| {
+                            E::normalize(variogram, *counts);
+                        });
                 },
             );
-
-        E::normalize_mat(variogram.view_mut(), counts.view());
 
         (variogram, counts)
     }
@@ -501,9 +489,9 @@ pub fn variogram_unstructured(
                                 });
                             });
                     });
-            });
 
-        E::normalize_vec(variogram.view_mut(), counts.view());
+                E::normalize(variogram, *counts);
+            });
 
         (variogram, counts)
     }
