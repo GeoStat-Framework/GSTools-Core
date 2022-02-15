@@ -152,20 +152,19 @@ pub fn variogram_structured(f: ArrayView2<'_, f64>, estimator_type: char) -> Arr
         let size = f.dim().0;
 
         let mut variogram = Array1::<f64>::zeros(size);
-        let mut counts = Array1::<u64>::zeros(size);
 
-        Zip::indexed(variogram.slice_mut(s![1..]))
-            .and(counts.slice_mut(s![1..]))
-            .par_for_each(|k, variogram, counts| {
-                Zip::from(f.slice(s![..size - k - 1, ..]))
-                    .and(f.slice(s![k + 1.., ..]))
-                    .for_each(|f_i, f_j| {
-                        *counts += 1;
-                        *variogram += E::estimate(f_i - f_j);
-                    });
-            });
+        Zip::indexed(variogram.slice_mut(s![1..])).par_for_each(|k, variogram| {
+            let mut count = 0;
 
-        E::normalize_vec(variogram.view_mut(), counts.view());
+            Zip::from(f.slice(s![..size - k - 1, ..]))
+                .and(f.slice(s![k + 1.., ..]))
+                .for_each(|f_i, f_j| {
+                    *variogram += E::estimate(f_i - f_j);
+                    count += 1;
+                });
+
+            E::normalize(variogram, count);
+        });
 
         variogram
     }
@@ -195,26 +194,25 @@ pub fn variogram_ma_structured(
         let size = f.dim().0;
 
         let mut variogram = Array1::<f64>::zeros(size);
-        let mut counts = Array1::<u64>::zeros(size);
 
-        Zip::indexed(variogram.slice_mut(s![1..]))
-            .and(counts.slice_mut(s![1..]))
-            .par_for_each(|k, variogram, counts| {
-                Zip::from(f.slice(s![..size - k - 1, ..]))
-                    .and(f.slice(s![k + 1.., ..]))
-                    .and(mask.slice(s![..size - k - 1, ..]))
-                    .and(mask.slice(s![k + 1.., ..]))
-                    .for_each(|f_i, f_j, m_i, m_j| {
-                        if *m_i || *m_j {
-                            return;
-                        }
+        Zip::indexed(variogram.slice_mut(s![1..])).par_for_each(|k, variogram| {
+            let mut count = 0;
 
-                        *counts += 1;
-                        *variogram += E::estimate(f_i - f_j);
-                    });
-            });
+            Zip::from(f.slice(s![..size - k - 1, ..]))
+                .and(f.slice(s![k + 1.., ..]))
+                .and(mask.slice(s![..size - k - 1, ..]))
+                .and(mask.slice(s![k + 1.., ..]))
+                .for_each(|f_i, f_j, m_i, m_j| {
+                    if *m_i || *m_j {
+                        return;
+                    }
 
-        E::normalize_vec(variogram.view_mut(), counts.view());
+                    *variogram += E::estimate(f_i - f_j);
+                    count += 1;
+                });
+
+            E::normalize(variogram, count);
+        });
 
         variogram
     }
