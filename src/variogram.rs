@@ -19,13 +19,19 @@ use ndarray::{
 
 trait Estimator {
     fn estimate(f_diff: f64) -> f64;
-    fn normalize(variogram: ArrayViewMut1<f64>, counts: ArrayView1<u64>);
+    fn normalize(v: &mut f64, c: u64);
 
-    fn normalize_vec(mut variogram: ArrayViewMut2<f64>, counts: ArrayView2<u64>) {
+    fn normalize_vec(variogram: ArrayViewMut1<f64>, counts: ArrayView1<u64>) {
+        Zip::from(variogram).and(counts).for_each(|v, c| {
+            Self::normalize(v, *c);
+        });
+    }
+
+    fn normalize_mat(mut variogram: ArrayViewMut2<f64>, counts: ArrayView2<u64>) {
         Zip::from(variogram.rows_mut())
             .and(counts.rows())
             .par_for_each(|variogram, counts| {
-                Self::normalize(variogram, counts);
+                Self::normalize_vec(variogram, counts);
             });
     }
 }
@@ -54,11 +60,9 @@ impl Estimator for Matheron {
         f_diff.powi(2)
     }
 
-    fn normalize(variogram: ArrayViewMut1<f64>, counts: ArrayView1<u64>) {
-        Zip::from(variogram).and(counts).for_each(|v, c| {
-            let cf = if *c == 0 { 1.0 } else { *c as f64 };
-            *v /= 2.0 * cf;
-        });
+    fn normalize(v: &mut f64, c: u64) {
+        let cf = if c == 0 { 1.0 } else { c as f64 };
+        *v /= 2.0 * cf;
     }
 }
 
@@ -69,11 +73,9 @@ impl Estimator for Cressie {
         f_diff.abs().sqrt()
     }
 
-    fn normalize(variogram: ArrayViewMut1<f64>, counts: ArrayView1<u64>) {
-        Zip::from(variogram).and(counts).for_each(|v, c| {
-            let cf = if *c == 0 { 1.0 } else { *c as f64 };
-            *v = 0.5 * (1. / cf * *v).powi(4) / (0.457 + 0.494 / cf + 0.045 / (cf * cf))
-        });
+    fn normalize(v: &mut f64, c: u64) {
+        let cf = if c == 0 { 1.0 } else { c as f64 };
+        *v = 0.5 * (1. / cf * *v).powi(4) / (0.457 + 0.494 / cf + 0.045 / (cf * cf))
     }
 }
 
@@ -163,7 +165,7 @@ pub fn variogram_structured(f: ArrayView2<'_, f64>, estimator_type: char) -> Arr
                     });
             });
 
-        E::normalize(variogram.view_mut(), counts.view());
+        E::normalize_vec(variogram.view_mut(), counts.view());
 
         variogram
     }
@@ -212,7 +214,7 @@ pub fn variogram_ma_structured(
                     });
             });
 
-        E::normalize(variogram.view_mut(), counts.view());
+        E::normalize_vec(variogram.view_mut(), counts.view());
 
         variogram
     }
@@ -392,7 +394,7 @@ pub fn variogram_directional(
                 },
             );
 
-        E::normalize_vec(variogram.view_mut(), counts.view());
+        E::normalize_mat(variogram.view_mut(), counts.view());
 
         (variogram, counts)
     }
@@ -490,7 +492,7 @@ pub fn variogram_unstructured(
                     });
             });
 
-        E::normalize(variogram.view_mut(), counts.view());
+        E::normalize_vec(variogram.view_mut(), counts.view());
 
         (variogram, counts)
     }
