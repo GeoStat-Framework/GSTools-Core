@@ -14,7 +14,7 @@
 //! $$
 
 use ndarray::{s, Array1, Array2, ArrayView1, ArrayView2, FoldWhile, Zip};
-use rayon::iter::{IndexedParallelIterator, IntoParallelIterator, ParallelIterator};
+use rayon::iter::{IntoParallelIterator, ParallelExtend, ParallelIterator};
 
 trait Estimator {
     fn estimate(f_diff: f64) -> f64;
@@ -136,26 +136,25 @@ pub fn variogram_structured(f: ArrayView2<'_, f64>, estimator_type: char) -> Arr
     fn inner<E: Estimator>(f: ArrayView2<'_, f64>) -> Array1<f64> {
         let size = f.dim().0;
 
-        let mut variogram = Vec::new();
+        let mut variogram = Vec::with_capacity(size);
 
-        (0..size)
-            .into_par_iter()
-            .map(|k| {
-                let mut value = 0.0;
-                let mut count = 0;
+        variogram.push(0.0);
 
-                Zip::from(f.slice(s![..size - k, ..]))
-                    .and(f.slice(s![k.., ..]))
-                    .for_each(|f_i, f_j| {
-                        value += E::estimate(f_i - f_j);
-                        count += 1;
-                    });
+        variogram.par_extend((1..size).into_par_iter().map(|k| {
+            let mut value = 0.0;
+            let mut count = 0;
 
-                E::normalize(&mut value, count);
+            Zip::from(f.slice(s![..size - k, ..]))
+                .and(f.slice(s![k.., ..]))
+                .for_each(|f_i, f_j| {
+                    value += E::estimate(f_i - f_j);
+                    count += 1;
+                });
 
-                value
-            })
-            .collect_into_vec(&mut variogram);
+            E::normalize(&mut value, count);
+
+            value
+        }));
 
         Array1::from_vec(variogram)
     }
@@ -184,32 +183,31 @@ pub fn variogram_ma_structured(
     fn inner<E: Estimator>(f: ArrayView2<'_, f64>, mask: ArrayView2<'_, bool>) -> Array1<f64> {
         let size = f.dim().0;
 
-        let mut variogram = Vec::new();
+        let mut variogram = Vec::with_capacity(size);
 
-        (0..size)
-            .into_par_iter()
-            .map(|k| {
-                let mut value = 0.0;
-                let mut count = 0;
+        variogram.push(0.0);
 
-                Zip::from(f.slice(s![..size - k, ..]))
-                    .and(f.slice(s![k.., ..]))
-                    .and(mask.slice(s![..size - k, ..]))
-                    .and(mask.slice(s![k.., ..]))
-                    .for_each(|f_i, f_j, m_i, m_j| {
-                        if *m_i || *m_j {
-                            return;
-                        }
+        variogram.par_extend((1..size).into_par_iter().map(|k| {
+            let mut value = 0.0;
+            let mut count = 0;
 
-                        value += E::estimate(f_i - f_j);
-                        count += 1;
-                    });
+            Zip::from(f.slice(s![..size - k, ..]))
+                .and(f.slice(s![k.., ..]))
+                .and(mask.slice(s![..size - k, ..]))
+                .and(mask.slice(s![k.., ..]))
+                .for_each(|f_i, f_j, m_i, m_j| {
+                    if *m_i || *m_j {
+                        return;
+                    }
 
-                E::normalize(&mut value, count);
+                    value += E::estimate(f_i - f_j);
+                    count += 1;
+                });
 
-                value
-            })
-            .collect_into_vec(&mut variogram);
+            E::normalize(&mut value, count);
+
+            value
+        }));
 
         Array1::from_vec(variogram)
     }
