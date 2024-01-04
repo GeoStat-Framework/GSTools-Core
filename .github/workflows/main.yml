@@ -127,7 +127,7 @@ jobs:
       - name: Build wheels - universal2
         uses: messense/maturin-action@v1
         with:
-          args: --release --universal2 --out dist
+          args: --release --out --  --universal2 dist
       - name: Install built wheel - universal2
         run: |
           pip install gstools-core --no-index --find-links dist --force-reinstall --no-deps
