@@ -76,7 +76,8 @@ fn gstools_core(_py: Python<'_>, m: &PyModule) -> PyResult<()> {
         let krige_mat = krige_mat.as_array();
         let krig_vecs = krig_vecs.as_array();
         let cond = cond.as_array();
-        let (field, error) = calculator_field_krige_and_variance(krige_mat, krig_vecs, cond, num_threads);
+        let (field, error) =
+            calculator_field_krige_and_variance(krige_mat, krig_vecs, cond, num_threads);
         let field = field.into_pyarray(py);
         let error = error.into_pyarray(py);
         (field, error)
@@ -181,8 +182,14 @@ fn gstools_core(_py: Python<'_>, m: &PyModule) -> PyResult<()> {
         let pos = pos.as_array();
         let estimator_type = estimator_type.unwrap_or('m');
         let distance_type = distance_type.unwrap_or('e');
-        let (variogram, counts) =
-            variogram_unstructured(f, bin_edges, pos, estimator_type, distance_type, num_threads);
+        let (variogram, counts) = variogram_unstructured(
+            f,
+            bin_edges,
+            pos,
+            estimator_type,
+            distance_type,
+            num_threads,
+        );
         let variogram = variogram.into_pyarray(py);
         let counts = counts.into_pyarray(py);
 
