@@ -29,13 +29,13 @@ lto = true
 codegen-units = 1
 
 [dependencies]
-pyo3 = { version = "0.15", features = ["abi3-py36", "extension-module"] }
-numpy = "0.15"
+pyo3 = { version = "0.20", features = ["abi3-py38", "extension-module"] }
+numpy = "0.20"
 ndarray = { version = "0.15", features = ["rayon", "approx-0_5"] }
-rayon = "1.5"
+rayon = "1.8"
 
 [dev-dependencies]
-criterion = { version = "0.3", features = ["html_reports"] }
+criterion = { version = "0.5", features = ["html_reports"] }
 approx = "0.5"
 ndarray-rand = "0.14"
 
