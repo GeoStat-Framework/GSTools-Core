@@ -132,35 +132,46 @@ impl Distance for Haversine {
 /// * `estimator_type` - the estimator function, can be
 ///     * 'm' - Matheron, the standard method of moments by Matheron
 ///     * 'c' - Cressie, an estimator more robust to outliers
-pub fn variogram_structured(f: ArrayView2<'_, f64>, estimator_type: char) -> Array1<f64> {
-    fn inner<E: Estimator>(f: ArrayView2<'_, f64>) -> Array1<f64> {
+/// * `num_threads` - the number of parallel threads used, if None, use rayon's default
+pub fn variogram_structured(
+    f: ArrayView2<'_, f64>,
+    estimator_type: char,
+    num_threads: Option<usize>,
+) -> Array1<f64> {
+    fn inner<E: Estimator>(f: ArrayView2<'_, f64>, num_threads: Option<usize>) -> Array1<f64> {
         let size = f.dim().0;
 
         let mut variogram = Vec::with_capacity(size);
 
         variogram.push(0.0);
 
-        variogram.par_extend((1..size).into_par_iter().map(|k| {
-            let mut value = 0.0;
-            let mut count = 0;
+        rayon::ThreadPoolBuilder::new()
+            .num_threads(num_threads.unwrap_or(rayon::current_num_threads()))
+            .build()
+            .unwrap()
+            .install(|| {
+                variogram.par_extend((1..size).into_par_iter().map(|k| {
+                    let mut value = 0.0;
+                    let mut count = 0;
 
-            Zip::from(f.slice(s![..size - k, ..]))
-                .and(f.slice(s![k.., ..]))
-                .for_each(|f_i, f_j| {
-                    value += E::estimate(f_i - f_j);
-                    count += 1;
-                });
+                    Zip::from(f.slice(s![..size - k, ..]))
+                        .and(f.slice(s![k.., ..]))
+                        .for_each(|f_i, f_j| {
+                            value += E::estimate(f_i - f_j);
+                            count += 1;
+                        });
 
-            E::normalize(&mut value, count);
+                    E::normalize(&mut value, count);
 
-            value
-        }));
+                    value
+                }))
+            });
 
         Array1::from_vec(variogram)
     }
 
     choose_estimator!(estimator_type => E: {
-        inner::<E>(f)
+        inner::<E>(f, num_threads)
     })
 }
 
@@ -175,45 +186,57 @@ pub fn variogram_structured(f: ArrayView2<'_, f64>, estimator_type: char) -> Arr
 /// * `estimator_type` - the estimator function, can be
 ///     * 'm' - Matheron, the standard method of moments by Matheron
 ///     * 'c' - Cressie, an estimator more robust to outliers
+/// * `num_threads` - the number of parallel threads used, if None, use rayon's default
 pub fn variogram_ma_structured(
     f: ArrayView2<'_, f64>,
     mask: ArrayView2<'_, bool>,
     estimator_type: char,
+    num_threads: Option<usize>,
 ) -> Array1<f64> {
-    fn inner<E: Estimator>(f: ArrayView2<'_, f64>, mask: ArrayView2<'_, bool>) -> Array1<f64> {
+    fn inner<E: Estimator>(
+        f: ArrayView2<'_, f64>,
+        mask: ArrayView2<'_, bool>,
+        num_threads: Option<usize>,
+    ) -> Array1<f64> {
         let size = f.dim().0;
 
         let mut variogram = Vec::with_capacity(size);
 
         variogram.push(0.0);
 
-        variogram.par_extend((1..size).into_par_iter().map(|k| {
-            let mut value = 0.0;
-            let mut count = 0;
+        rayon::ThreadPoolBuilder::new()
+            .num_threads(num_threads.unwrap_or(rayon::current_num_threads()))
+            .build()
+            .unwrap()
+            .install(|| {
+                variogram.par_extend((1..size).into_par_iter().map(|k| {
+                    let mut value = 0.0;
+                    let mut count = 0;
 
-            Zip::from(f.slice(s![..size - k, ..]))
-                .and(f.slice(s![k.., ..]))
-                .and(mask.slice(s![..size - k, ..]))
-                .and(mask.slice(s![k.., ..]))
-                .for_each(|f_i, f_j, m_i, m_j| {
-                    if *m_i || *m_j {
-                        return;
-                    }
+                    Zip::from(f.slice(s![..size - k, ..]))
+                        .and(f.slice(s![k.., ..]))
+                        .and(mask.slice(s![..size - k, ..]))
+                        .and(mask.slice(s![k.., ..]))
+                        .for_each(|f_i, f_j, m_i, m_j| {
+                            if *m_i || *m_j {
+                                return;
+                            }
 
-                    value += E::estimate(f_i - f_j);
-                    count += 1;
-                });
+                            value += E::estimate(f_i - f_j);
+                            count += 1;
+                        });
 
-            E::normalize(&mut value, count);
+                    E::normalize(&mut value, count);
 
-            value
-        }));
+                    value
+                }))
+            });
 
         Array1::from_vec(variogram)
     }
 
     choose_estimator!(estimator_type => E: {
-        inner::<E>(f, mask)
+        inner::<E>(f, mask, num_threads)
     })
 }
 
@@ -287,6 +310,7 @@ fn dir_test(
 /// * `estimator_type` - the estimator function, can be
 ///     * 'm' - Matheron, the standard method of moments by Matheron
 ///     * 'c' - Cressie, an estimator more robust to outliers
+/// * `num_threads` - the number of parallel threads used, if None, use rayon's default
 #[allow(clippy::too_many_arguments)]
 pub fn variogram_directional(
     f: ArrayView2<'_, f64>,
@@ -297,6 +321,7 @@ pub fn variogram_directional(
     bandwidth: f64,
     separate_dirs: bool,
     estimator_type: char,
+    num_threads: Option<usize>,
 ) -> (Array2<f64>, Array2<u64>) {
     assert_eq!(
         pos.dim().0,
@@ -330,6 +355,7 @@ pub fn variogram_directional(
         angles_tol: f64,
         bandwidth: f64,
         separate_dirs: bool,
+        num_threads: Option<usize>,
     ) -> (Array2<f64>, Array2<u64>) {
         let out_size = (direction.dim().0, bin_edges.dim() - 1);
         let in_size = pos.dim().1 - 1;
@@ -337,61 +363,68 @@ pub fn variogram_directional(
         let mut variogram = Array2::<f64>::zeros(out_size);
         let mut counts = Array2::<u64>::zeros(out_size);
 
-        Zip::from(bin_edges.slice(s![..out_size.1]))
-            .and(bin_edges.slice(s![1..]))
-            .and(variogram.columns_mut())
-            .and(counts.columns_mut())
-            .par_for_each(
-                |lower_bin_edge, upper_bin_edge, mut variogram, mut counts| {
-                    Zip::indexed(f.slice(s![.., ..in_size]).columns())
-                        .and(pos.slice(s![.., ..in_size]).columns())
-                        .for_each(|i, f_i, pos_i| {
-                            Zip::from(f.slice(s![.., i + 1..]).columns())
-                                .and(pos.slice(s![.., i + 1..]).columns())
-                                .for_each(|f_j, pos_j| {
-                                    let dist = Euclid::dist(pos_i, pos_j);
-                                    if dist < *lower_bin_edge || dist >= *upper_bin_edge {
-                                        return; //skip if not in current bin
-                                    }
-
-                                    Zip::from(direction.rows())
-                                        .and(&mut variogram)
-                                        .and(&mut counts)
-                                        .fold_while((), |(), dir, variogram, counts| {
-                                            if !dir_test(
-                                                dir, pos_i, pos_j, dist, angles_tol, bandwidth,
-                                            ) {
-                                                return FoldWhile::Continue(());
+        rayon::ThreadPoolBuilder::new()
+            .num_threads(num_threads.unwrap_or(rayon::current_num_threads()))
+            .build()
+            .unwrap()
+            .install(|| {
+                Zip::from(bin_edges.slice(s![..out_size.1]))
+                    .and(bin_edges.slice(s![1..]))
+                    .and(variogram.columns_mut())
+                    .and(counts.columns_mut())
+                    .par_for_each(
+                        |lower_bin_edge, upper_bin_edge, mut variogram, mut counts| {
+                            Zip::indexed(f.slice(s![.., ..in_size]).columns())
+                                .and(pos.slice(s![.., ..in_size]).columns())
+                                .for_each(|i, f_i, pos_i| {
+                                    Zip::from(f.slice(s![.., i + 1..]).columns())
+                                        .and(pos.slice(s![.., i + 1..]).columns())
+                                        .for_each(|f_j, pos_j| {
+                                            let dist = Euclid::dist(pos_i, pos_j);
+                                            if dist < *lower_bin_edge || dist >= *upper_bin_edge {
+                                                return; //skip if not in current bin
                                             }
 
-                                            Zip::from(f_i).and(f_j).for_each(|f_i, f_j| {
-                                                let f_ij = f_i - f_j;
-                                                if f_ij.is_nan() {
-                                                    return; // skip no data values
-                                                }
+                                            Zip::from(direction.rows())
+                                                .and(&mut variogram)
+                                                .and(&mut counts)
+                                                .fold_while((), |(), dir, variogram, counts| {
+                                                    if !dir_test(
+                                                        dir, pos_i, pos_j, dist, angles_tol,
+                                                        bandwidth,
+                                                    ) {
+                                                        return FoldWhile::Continue(());
+                                                    }
 
-                                                *counts += 1;
-                                                *variogram += E::estimate(f_ij);
-                                            });
+                                                    Zip::from(f_i).and(f_j).for_each(|f_i, f_j| {
+                                                        let f_ij = f_i - f_j;
+                                                        if f_ij.is_nan() {
+                                                            return; // skip no data values
+                                                        }
 
-                                            //once we found a fitting direction
-                                            //break the search if directions are separated
-                                            if separate_dirs {
-                                                return FoldWhile::Done(());
-                                            }
+                                                        *counts += 1;
+                                                        *variogram += E::estimate(f_ij);
+                                                    });
 
-                                            FoldWhile::Continue(())
+                                                    //once we found a fitting direction
+                                                    //break the search if directions are separated
+                                                    if separate_dirs {
+                                                        return FoldWhile::Done(());
+                                                    }
+
+                                                    FoldWhile::Continue(())
+                                                });
                                         });
                                 });
-                        });
 
-                    Zip::from(variogram)
-                        .and(counts)
-                        .for_each(|variogram, counts| {
-                            E::normalize(variogram, *counts);
-                        });
-                },
-            );
+                            Zip::from(variogram)
+                                .and(counts)
+                                .for_each(|variogram, counts| {
+                                    E::normalize(variogram, *counts);
+                                });
+                        },
+                    )
+            });
 
         (variogram, counts)
     }
@@ -404,7 +437,8 @@ pub fn variogram_directional(
             direction,
             angles_tol,
             bandwidth,
-            separate_dirs
+            separate_dirs,
+            num_threads,
         )
     })
 }
@@ -427,12 +461,14 @@ pub fn variogram_directional(
 /// * `distance_type` - the distance function, can be
 ///     * 'e' - Euclidean, the Euclidean distance
 ///     * 'h' - Haversine, the great-circle distance
+/// * `num_threads` - the number of parallel threads used, if None, use rayon's default
 pub fn variogram_unstructured(
     f: ArrayView2<'_, f64>,
     bin_edges: ArrayView1<'_, f64>,
     pos: ArrayView2<'_, f64>,
     estimator_type: char,
     distance_type: char,
+    num_threads: Option<usize>,
 ) -> (Array1<f64>, Array1<u64>) {
     assert_eq!(
         pos.dim().1,
@@ -451,6 +487,7 @@ pub fn variogram_unstructured(
         f: ArrayView2<'_, f64>,
         bin_edges: ArrayView1<'_, f64>,
         pos: ArrayView2<'_, f64>,
+        num_threads: Option<usize>,
     ) -> (Array1<f64>, Array1<u64>) {
         D::check_dim(pos.dim().0);
 
@@ -460,35 +497,41 @@ pub fn variogram_unstructured(
         let mut variogram = Array1::<f64>::zeros(out_size);
         let mut counts = Array1::<u64>::zeros(out_size);
 
-        Zip::from(bin_edges.slice(s![..out_size]))
-            .and(bin_edges.slice(s![1..]))
-            .and(&mut variogram)
-            .and(&mut counts)
-            .par_for_each(|lower_bin_edge, upper_bin_edge, variogram, counts| {
-                Zip::indexed(f.slice(s![.., ..in_size]).columns())
-                    .and(pos.slice(s![.., ..in_size]).columns())
-                    .for_each(|i, f_i, pos_i| {
-                        Zip::from(f.slice(s![.., i + 1..]).columns())
-                            .and(pos.slice(s![.., i + 1..]).columns())
-                            .for_each(|f_j, pos_j| {
-                                let dist = D::dist(pos_i, pos_j);
-                                if dist < *lower_bin_edge || dist >= *upper_bin_edge {
-                                    return; //skip if not in current bin
-                                }
+        rayon::ThreadPoolBuilder::new()
+            .num_threads(num_threads.unwrap_or(rayon::current_num_threads()))
+            .build()
+            .unwrap()
+            .install(|| {
+                Zip::from(bin_edges.slice(s![..out_size]))
+                    .and(bin_edges.slice(s![1..]))
+                    .and(&mut variogram)
+                    .and(&mut counts)
+                    .par_for_each(|lower_bin_edge, upper_bin_edge, variogram, counts| {
+                        Zip::indexed(f.slice(s![.., ..in_size]).columns())
+                            .and(pos.slice(s![.., ..in_size]).columns())
+                            .for_each(|i, f_i, pos_i| {
+                                Zip::from(f.slice(s![.., i + 1..]).columns())
+                                    .and(pos.slice(s![.., i + 1..]).columns())
+                                    .for_each(|f_j, pos_j| {
+                                        let dist = D::dist(pos_i, pos_j);
+                                        if dist < *lower_bin_edge || dist >= *upper_bin_edge {
+                                            return; //skip if not in current bin
+                                        }
 
-                                Zip::from(f_i).and(f_j).for_each(|f_i, f_j| {
-                                    let f_ij = f_i - f_j;
-                                    if f_ij.is_nan() {
-                                        return; // skip no data values
-                                    }
+                                        Zip::from(f_i).and(f_j).for_each(|f_i, f_j| {
+                                            let f_ij = f_i - f_j;
+                                            if f_ij.is_nan() {
+                                                return; // skip no data values
+                                            }
 
-                                    *counts += 1;
-                                    *variogram += E::estimate(f_ij);
-                                });
+                                            *counts += 1;
+                                            *variogram += E::estimate(f_ij);
+                                        });
+                                    });
                             });
-                    });
 
-                E::normalize(variogram, *counts);
+                        E::normalize(variogram, *counts);
+                    })
             });
 
         (variogram, counts)
@@ -496,7 +539,7 @@ pub fn variogram_unstructured(
 
     choose_estimator!(estimator_type => E: {
         choose_distance!(distance_type => D: {
-            inner::<E, D>(f, bin_edges, pos)
+            inner::<E, D>(f, bin_edges, pos, num_threads)
         })
     })
 }
@@ -536,7 +579,7 @@ mod tests {
         let setup = SetupStruct::new();
 
         assert_ulps_eq!(
-            variogram_structured(setup.field.view(), 'm'),
+            variogram_structured(setup.field.view(), 'm', None),
             arr1(&[
                 0.0,
                 0.49166666666666814,
@@ -582,7 +625,7 @@ mod tests {
         ]);
 
         assert_ulps_eq!(
-            variogram_ma_structured(setup.field.view(), mask1.view(), 'm'),
+            variogram_ma_structured(setup.field.view(), mask1.view(), 'm', None),
             arr1(&[
                 0.0,
                 0.49166666666666814,
@@ -598,7 +641,7 @@ mod tests {
             max_ulps = 6
         );
         assert_ulps_eq!(
-            variogram_ma_structured(setup.field.view(), mask2.view(), 'm'),
+            variogram_ma_structured(setup.field.view(), mask2.view(), 'm', None),
             arr1(&[
                 0.0,
                 0.4906250000000017,
@@ -655,6 +698,7 @@ mod tests {
             setup.pos.view(),
             'm',
             'e',
+            None,
         );
         assert_ulps_eq!(
             gamma,
@@ -711,6 +755,7 @@ mod tests {
             setup.pos.view(),
             'm',
             'e',
+            None,
         );
         let (gamma2, _) = variogram_unstructured(
             field2.view(),
@@ -718,6 +763,7 @@ mod tests {
             setup.pos.view(),
             'm',
             'e',
+            None,
         );
         let (gamma_multi, _) = variogram_unstructured(
             field_multi.view(),
@@ -725,6 +771,7 @@ mod tests {
             setup.pos.view(),
             'm',
             'e',
+            None,
         );
         let gamma_single = 0.5 * (&gamma + &gamma2);
         assert_ulps_eq!(gamma_multi, gamma_single, max_ulps = 6,);
@@ -739,6 +786,7 @@ mod tests {
             -1.0,
             false,
             'm',
+            None,
         );
         let (gamma2, _) = variogram_directional(
             field2.view(),
@@ -749,6 +797,7 @@ mod tests {
             -1.0,
             false,
             'm',
+            None,
         );
         let (gamma_multi, _) = variogram_directional(
             field_multi.view(),
@@ -759,6 +808,7 @@ mod tests {
             -1.0,
             false,
             'm',
+            None,
         );
 
         let gamma_single = 0.5 * (&gamma + &gamma2);
@@ -778,6 +828,7 @@ mod tests {
             -1.0,
             false,
             'm',
+            None,
         );
         assert_ulps_eq!(
             gamma,

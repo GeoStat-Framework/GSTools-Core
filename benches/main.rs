@@ -62,11 +62,11 @@ pub fn field_benchmark(c: &mut Criterion) {
     let z_2 = read_1d_from_file(&path.join("field_z_2.txt"));
 
     c.bench_function("field summate", |b| {
-        b.iter(|| summator(cov_samples.view(), z_1.view(), z_2.view(), pos.view()))
+        b.iter(|| summator(cov_samples.view(), z_1.view(), z_2.view(), pos.view(), None))
     });
 
     c.bench_function("field summate incompr", |b| {
-        b.iter(|| summator_incompr(cov_samples.view(), z_1.view(), z_2.view(), pos.view()))
+        b.iter(|| summator_incompr(cov_samples.view(), z_1.view(), z_2.view(), pos.view(), None))
     });
 }
 
@@ -79,12 +79,17 @@ pub fn krige_benchmark(c: &mut Criterion) {
 
     c.bench_function("krige error", |b| {
         b.iter(|| {
-            calculator_field_krige_and_variance(krige_mat.view(), k_vec.view(), krige_cond.view())
+            calculator_field_krige_and_variance(
+                krige_mat.view(),
+                k_vec.view(),
+                krige_cond.view(),
+                None,
+            )
         })
     });
 
     c.bench_function("krige", |b| {
-        b.iter(|| calculator_field_krige(krige_mat.view(), k_vec.view(), krige_cond.view()))
+        b.iter(|| calculator_field_krige(krige_mat.view(), k_vec.view(), krige_cond.view(), None))
     });
 }
 
@@ -98,12 +103,12 @@ pub fn variogram_benchmark(c: &mut Criterion) {
 
     c.bench_function("variogram structured", |b| {
         b.iter(|| {
-            variogram_structured(black_box(f.view()), 'm');
+            variogram_structured(black_box(f.view()), 'm', None);
         })
     });
     c.bench_function("variogram masked structured", |b| {
         b.iter(|| {
-            variogram_ma_structured(black_box(f.view()), black_box(mask.view()), 'm');
+            variogram_ma_structured(black_box(f.view()), black_box(mask.view()), 'm', None);
         })
     });
 
@@ -120,6 +125,7 @@ pub fn variogram_benchmark(c: &mut Criterion) {
                 black_box(pos.view()),
                 'm',
                 'e',
+                None,
             );
         })
     });
@@ -137,6 +143,7 @@ pub fn variogram_benchmark(c: &mut Criterion) {
                 -1.0,
                 false,
                 'm',
+                None,
             );
         })
     });
