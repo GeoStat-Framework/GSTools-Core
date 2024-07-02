@@ -15,7 +15,7 @@
 use numpy::{IntoPyArray, PyArray1, PyArray2, PyReadonlyArray1, PyReadonlyArray2};
 use pyo3::prelude::{pymodule, PyModule, PyResult, Python};
 
-use field::{summator, summator_incompr, summator_fourier};
+use field::{summator, summator_fourier, summator_incompr};
 use krige::{calculator_field_krige, calculator_field_krige_and_variance};
 use variogram::{
     variogram_directional, variogram_ma_structured, variogram_structured, variogram_unstructured,
