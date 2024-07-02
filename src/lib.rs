@@ -15,7 +15,7 @@
 use numpy::{IntoPyArray, PyArray1, PyArray2, PyReadonlyArray1, PyReadonlyArray2};
 use pyo3::prelude::{pymodule, PyModule, PyResult, Python};
 
-use field::{summator, summator_incompr};
+use field::{summator, summator_incompr, summator_fourier};
 use krige::{calculator_field_krige, calculator_field_krige_and_variance};
 use variogram::{
     variogram_directional, variogram_ma_structured, variogram_structured, variogram_unstructured,
@@ -62,6 +62,25 @@ fn gstools_core(_py: Python<'_>, m: &PyModule) -> PyResult<()> {
         let z2 = z2.as_array();
         let pos = pos.as_array();
         summator_incompr(cov_samples, z1, z2, pos, num_threads).into_pyarray(py)
+    }
+
+    #[pyfn(m)]
+    #[pyo3(name = "summate_fourier")]
+    fn summate_fourier_py<'py>(
+        py: Python<'py>,
+        spectrum_factor: PyReadonlyArray1<f64>,
+        modes: PyReadonlyArray2<f64>,
+        z1: PyReadonlyArray1<f64>,
+        z2: PyReadonlyArray1<f64>,
+        pos: PyReadonlyArray2<f64>,
+        num_threads: Option<usize>,
+    ) -> &'py PyArray1<f64> {
+        let spectrum_factor = spectrum_factor.as_array();
+        let modes = modes.as_array();
+        let z1 = z1.as_array();
+        let z2 = z2.as_array();
+        let pos = pos.as_array();
+        summator_fourier(spectrum_factor, modes, z1, z2, pos, num_threads).into_pyarray(py)
     }
 
     #[pyfn(m)]
