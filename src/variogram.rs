@@ -297,13 +297,13 @@ fn dir_test(
 /// # Arguments
 ///
 /// * `f` - the spatially distributed data
-/// <br>&nbsp;&nbsp;&nbsp;&nbsp; dim = (no. of data fields, no. of spatial data points per field $i$)
+///   <br>&nbsp;&nbsp;&nbsp;&nbsp; dim = (no. of data fields, no. of spatial data points per field $i$)
 /// * `bin_edges` - the bins of the variogram
-/// <br>&nbsp;&nbsp;&nbsp;&nbsp; dim = number of bins j
+///   <br>&nbsp;&nbsp;&nbsp;&nbsp; dim = number of bins j
 /// * `pos` - the positions of the data `f`
-/// <br>&nbsp;&nbsp;&nbsp;&nbsp; dim = (spatial dim. $d$, no. of spatial data points $i$)
+///   <br>&nbsp;&nbsp;&nbsp;&nbsp; dim = (spatial dim. $d$, no. of spatial data points $i$)
 /// * `direction` - directions in which the variogram will be estimated
-/// <br>&nbsp;&nbsp;&nbsp;&nbsp; dim = (no. of directions, spatial dim. $d$)
+///   <br>&nbsp;&nbsp;&nbsp;&nbsp; dim = (no. of directions, spatial dim. $d$)
 /// * `angles_tol` - the tolerance of the angles
 /// * `bandwidth` - bandwidth to cut off the angular tolerance
 /// * `separate_dirs` - do the direction bands overlap?
@@ -450,11 +450,11 @@ pub fn variogram_directional(
 /// # Arguments
 ///
 /// * `f` - the spatially distributed data
-/// <br> dim = (no. of data fields, no. of spatial data points per field $i$)
+///   <br> dim = (no. of data fields, no. of spatial data points per field $i$)
 /// * `bin_edges` - the bins of the variogram
-/// <br> dim = number of bins j
+///   <br> dim = number of bins j
 /// * `pos` - the positions of the data `f`
-/// <br> dim = (spatial dim. $d$, no. of spatial data points $i$)
+///   <br> dim = (spatial dim. $d$, no. of spatial data points $i$)
 /// * `estimator_type` - the estimator function, can be
 ///     * 'm' - Matheron, the standard method of moments by Matheron
 ///     * 'c' - Cressie, an estimator more robust to outliers

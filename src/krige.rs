@@ -8,19 +8,19 @@ use rayon::prelude::*;
 /// # Arguments
 ///
 /// * `krige_mat` - the kriging matrix
-/// <br>&nbsp;&nbsp;&nbsp;&nbsp;dim = (no. of kriging conditions `cond.dim()`, returned field `field.dim().0`)
+///   <br>&nbsp;&nbsp;&nbsp;&nbsp;dim = (no. of kriging conditions `cond.dim()`, returned field `field.dim().0`)
 /// * `krige_vecs` - the right hand side of the kriging system
-/// <br>&nbsp;&nbsp;&nbsp;&nbsp;dim = (`krig_mat.dim().0`, returned field `field.dim().0`)
+///   <br>&nbsp;&nbsp;&nbsp;&nbsp;dim = (`krig_mat.dim().0`, returned field `field.dim().0`)
 /// * `cond` - the kriging conditions
-/// <br>&nbsp;&nbsp;&nbsp;&nbsp;dim = `krig_mat.dim().0`
+///   <br>&nbsp;&nbsp;&nbsp;&nbsp;dim = `krig_mat.dim().0`
 /// * `num_threads` - the number of parallel threads used, if None, use rayon's default
 ///
 /// # Returns
 ///
 /// * `field` - the kriging field
-/// <br>&nbsp;&nbsp;&nbsp;&nbsp;dim = `krig_mat.dim().1`
+///   <br>&nbsp;&nbsp;&nbsp;&nbsp;dim = `krig_mat.dim().1`
 /// * `error` - the error variance
-/// <br>&nbsp;&nbsp;&nbsp;&nbsp;dim = `krig_mat.dim().1`
+///   <br>&nbsp;&nbsp;&nbsp;&nbsp;dim = `krig_mat.dim().1`
 pub fn calculator_field_krige_and_variance(
     krig_mat: ArrayView2<'_, f64>,
     krig_vecs: ArrayView2<'_, f64>,
@@ -78,17 +78,17 @@ pub fn calculator_field_krige_and_variance(
 /// # Arguments
 ///
 /// * `krige_mat` - the kriging matrix
-/// <br>&nbsp;&nbsp;&nbsp;&nbsp;dim = (no. of kriging conditions `cond.dim()`, returned field `field.dim().0`)
+///   <br>&nbsp;&nbsp;&nbsp;&nbsp;dim = (no. of kriging conditions `cond.dim()`, returned field `field.dim().0`)
 /// * `krige_vecs` - the right hand side of the kriging system
-/// <br>&nbsp;&nbsp;&nbsp;&nbsp;dim = (`krig_mat.dim().0`, returned field `field.dim().0`)
+///   <br>&nbsp;&nbsp;&nbsp;&nbsp;dim = (`krig_mat.dim().0`, returned field `field.dim().0`)
 /// * `cond` - the kriging conditions
-/// <br>&nbsp;&nbsp;&nbsp;&nbsp;dim = `krig_mat.dim().0`
+///   <br>&nbsp;&nbsp;&nbsp;&nbsp;dim = `krig_mat.dim().0`
 /// * `num_threads` - the number of parallel threads used, if None, use rayon's default
 ///
 /// # Returns
 ///
 /// * `field` - the kriging field
-/// <br>&nbsp;&nbsp;&nbsp;&nbsp;dim = `krig_mat.dim().1`
+///   <br>&nbsp;&nbsp;&nbsp;&nbsp;dim = `krig_mat.dim().1`
 pub fn calculator_field_krige(
     krig_mat: ArrayView2<'_, f64>,
     krig_vecs: ArrayView2<'_, f64>,

@@ -16,24 +16,24 @@ use crate::short_vec::ShortVec;
 /// * $N$ being the number of Fourier modes
 /// * $z_1, z_2$ being independent samples from a standard normal distribution
 /// * $k$ being the samples from the spectral density distribution of the covariance model
-/// and are given by the argument `cov_samples`.
+///   and are given by the argument `cov_samples`.
 ///
 /// # Arguments
 ///
 /// * `cov_samples` - the samples from the spectral density distribution of the covariance model
-/// <br>&nbsp;&nbsp;&nbsp;&nbsp; dim = (spatial dim. of field $d$, Fourier modes $N$)
+///   <br>&nbsp;&nbsp;&nbsp;&nbsp; dim = (spatial dim. of field $d$, Fourier modes $N$)
 /// * `z1` - independent samples from a standard normal distribution
-/// <br>&nbsp;&nbsp;&nbsp;&nbsp;dim = Fourier modes $N$
+///   <br>&nbsp;&nbsp;&nbsp;&nbsp;dim = Fourier modes $N$
 /// * `z2` - independent samples from a standard normal distribution
-/// <br>&nbsp;&nbsp;&nbsp;&nbsp;dim = Fourier modes $N$
+///   <br>&nbsp;&nbsp;&nbsp;&nbsp;dim = Fourier modes $N$
 /// * `pos` - the position $x$ where the spatial random field is calculated
-/// <br>&nbsp;&nbsp;&nbsp;&nbsp;dim = (spatial dim. of field $d$, no. of spatial points where field is calculated $j$)
+///   <br>&nbsp;&nbsp;&nbsp;&nbsp;dim = (spatial dim. of field $d$, no. of spatial points where field is calculated $j$)
 /// * `num_threads` - the number of parallel threads used, if None, use rayon's default
 ///
 /// # Returns
 ///
 /// * `summed_modes` - the isotropic spatial field
-/// <br>&nbsp;&nbsp;&nbsp;&nbsp;dim = no. of spatial points where field is calculated $j$
+///   <br>&nbsp;&nbsp;&nbsp;&nbsp;dim = no. of spatial points where field is calculated $j$
 pub fn summator(
     cov_samples: ArrayView2<'_, f64>,
     z1: ArrayView1<'_, f64>,
@@ -75,25 +75,25 @@ pub fn summator(
 /// * $N$ being the number of Fourier modes
 /// * $z_1, z_2$ being independent samples from a standard normal distribution
 /// * $k$ being the samples from the spectral density distribution of the covariance model
-/// and are given by the argument `cov_samples`.
+///   and are given by the argument `cov_samples`.
 /// * $p_i(k_j) = e_1 - \frac{k_ik_1}{|k|^2}$ being the projector ensuring the incompressibility
 ///
 /// # Arguments
 ///
 /// * `cov_samples` - the samples from the spectral density distribution of the covariance model
-/// <br>&nbsp;&nbsp;&nbsp;&nbsp;dim = (spatial dim. of field $d$, Fourier modes $N$)
+///   <br>&nbsp;&nbsp;&nbsp;&nbsp;dim = (spatial dim. of field $d$, Fourier modes $N$)
 /// * `z1` - independent samples from a standard normal distribution
-/// <br>&nbsp;&nbsp;&nbsp;&nbsp;dim = Fourier modes $N$
+///   <br>&nbsp;&nbsp;&nbsp;&nbsp;dim = Fourier modes $N$
 /// * `z2` - independent samples from a standard normal distribution
-/// <br>&nbsp;&nbsp;&nbsp;&nbsp;dim = Fourier modes $N$
+///   <br>&nbsp;&nbsp;&nbsp;&nbsp;dim = Fourier modes $N$
 /// * `pos` - the position $x$ where the spatial random field is calculated
-/// <br>&nbsp;&nbsp;&nbsp;&nbsp;dim = (spatial dim. of field $d$, no. of spatial points where field is calculated $j$)
+///   <br>&nbsp;&nbsp;&nbsp;&nbsp;dim = (spatial dim. of field $d$, no. of spatial points where field is calculated $j$)
 /// * `num_threads` - the number of parallel threads used, if None, use rayon's default
 ///
 /// # Returns
 ///
 /// * `summed_modes` - the isotropic incompressible spatial field
-/// <br>&nbsp;&nbsp;&nbsp;&nbsp;dim = (spatial dim. of field $d$, no. of spatial points where field is calculated $j$)
+///   <br>&nbsp;&nbsp;&nbsp;&nbsp;dim = (spatial dim. of field $d$, no. of spatial points where field is calculated $j$)
 pub fn summator_incompr(
     cov_samples: ArrayView2<'_, f64>,
     z1: ArrayView1<'_, f64>,
@@ -195,27 +195,27 @@ pub fn summator_incompr(
 /// * $N$ being the number of Fourier modes
 /// * $z_1, z_2$ being independent samples from a standard normal distribution
 /// * $k$ being the equidistant Fourier grid
-/// and are given by the argument `modes`.
+///   and are given by the argument `modes`.
 /// * $\Delta k$ being the cell size of the Fourier grid
 ///
 /// # Arguments
 ///
 /// * `spectrum_factor` - the pre-calculated factor $\sqrt{2S(k_i\Delta k)}
-/// <br>&nbsp;&nbsp;&nbsp;&nbsp; dim = Fourier modes $N$
+///   <br>&nbsp;&nbsp;&nbsp;&nbsp; dim = Fourier modes $N$
 /// * `modes` - equidistant Fourier grid, $k$ in Eq. above
-/// <br>&nbsp;&nbsp;&nbsp;&nbsp;dim = (spatial dim. of field $d$, Fourier modes $N$)
+///   <br>&nbsp;&nbsp;&nbsp;&nbsp;dim = (spatial dim. of field $d$, Fourier modes $N$)
 /// * `z1` - independent samples from a standard normal distribution
-/// <br>&nbsp;&nbsp;&nbsp;&nbsp;dim = Fourier modes $N$
+///   <br>&nbsp;&nbsp;&nbsp;&nbsp;dim = Fourier modes $N$
 /// * `z2` - independent samples from a standard normal distribution
-/// <br>&nbsp;&nbsp;&nbsp;&nbsp;dim = Fourier modes $N$
+///   <br>&nbsp;&nbsp;&nbsp;&nbsp;dim = Fourier modes $N$
 /// * `pos` - the position $x$ where the spatial random field is calculated
-/// <br>&nbsp;&nbsp;&nbsp;&nbsp;dim = (spatial dim. of field $d$, no. of spatial points where field is calculated $j$)
+///   <br>&nbsp;&nbsp;&nbsp;&nbsp;dim = (spatial dim. of field $d$, no. of spatial points where field is calculated $j$)
 /// * `num_threads` - the number of parallel threads used, if None, use rayon's default
 ///
 /// # Returns
 ///
 /// * `summed_modes` - the isotropic spatial field
-/// <br>&nbsp;&nbsp;&nbsp;&nbsp;dim = no. of spatial points where field is calculated $j$
+///   <br>&nbsp;&nbsp;&nbsp;&nbsp;dim = no. of spatial points where field is calculated $j$
 pub fn summator_fourier(
     spectrum_factor: ArrayView1<'_, f64>,
     modes: ArrayView2<'_, f64>,
