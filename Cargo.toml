@@ -29,10 +29,10 @@ lto = true
 codegen-units = 1
 
 [dependencies]
-pyo3 = { version = "0.20", features = ["abi3-py310", "extension-module"] }
-numpy = "0.20"
+pyo3 = { version = "0.21", features = ["abi3-py310", "extension-module"] }
+numpy = "0.21"
 ndarray = { version = "0.15", features = ["rayon", "approx-0_5"] }
-rayon = "1.8"
+rayon = "1.10"
 
 [dev-dependencies]
 criterion = { version = "0.5", features = ["html_reports"] }

@@ -13,7 +13,7 @@
 #![warn(missing_docs)]
 
 use numpy::{IntoPyArray, PyArray1, PyArray2, PyReadonlyArray1, PyReadonlyArray2};
-use pyo3::prelude::{pymodule, PyModule, PyResult, Python};
+use pyo3::prelude::{pymodule, Bound, PyModule, PyResult, Python};
 
 use field::{summator, summator_fourier, summator_incompr};
 use krige::{calculator_field_krige, calculator_field_krige_and_variance};
@@ -27,7 +27,7 @@ mod short_vec;
 pub mod variogram;
 
 #[pymodule]
-fn gstools_core(_py: Python<'_>, m: &PyModule) -> PyResult<()> {
+fn gstools_core(_py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add("__version__", env!("CARGO_PKG_VERSION"))?;
 
     #[pyfn(m)]
@@ -39,12 +39,12 @@ fn gstools_core(_py: Python<'_>, m: &PyModule) -> PyResult<()> {
         z2: PyReadonlyArray1<f64>,
         pos: PyReadonlyArray2<f64>,
         num_threads: Option<usize>,
-    ) -> &'py PyArray1<f64> {
+    ) -> Bound<'py, PyArray1<f64>> {
         let cov_samples = cov_samples.as_array();
         let z1 = z1.as_array();
         let z2 = z2.as_array();
         let pos = pos.as_array();
-        summator(cov_samples, z1, z2, pos, num_threads).into_pyarray(py)
+        summator(cov_samples, z1, z2, pos, num_threads).into_pyarray_bound(py)
     }
 
     #[pyfn(m)]
@@ -56,12 +56,12 @@ fn gstools_core(_py: Python<'_>, m: &PyModule) -> PyResult<()> {
         z2: PyReadonlyArray1<f64>,
         pos: PyReadonlyArray2<f64>,
         num_threads: Option<usize>,
-    ) -> &'py PyArray2<f64> {
+    ) -> Bound<'py, PyArray2<f64>> {
         let cov_samples = cov_samples.as_array();
         let z1 = z1.as_array();
         let z2 = z2.as_array();
         let pos = pos.as_array();
-        summator_incompr(cov_samples, z1, z2, pos, num_threads).into_pyarray(py)
+        summator_incompr(cov_samples, z1, z2, pos, num_threads).into_pyarray_bound(py)
     }
 
     #[pyfn(m)]
@@ -74,13 +74,13 @@ fn gstools_core(_py: Python<'_>, m: &PyModule) -> PyResult<()> {
         z2: PyReadonlyArray1<f64>,
         pos: PyReadonlyArray2<f64>,
         num_threads: Option<usize>,
-    ) -> &'py PyArray1<f64> {
+    ) -> Bound<'py, PyArray1<f64>> {
         let spectrum_factor = spectrum_factor.as_array();
         let modes = modes.as_array();
         let z1 = z1.as_array();
         let z2 = z2.as_array();
         let pos = pos.as_array();
-        summator_fourier(spectrum_factor, modes, z1, z2, pos, num_threads).into_pyarray(py)
+        summator_fourier(spectrum_factor, modes, z1, z2, pos, num_threads).into_pyarray_bound(py)
     }
 
     #[pyfn(m)]
@@ -91,14 +91,14 @@ fn gstools_core(_py: Python<'_>, m: &PyModule) -> PyResult<()> {
         krig_vecs: PyReadonlyArray2<f64>,
         cond: PyReadonlyArray1<f64>,
         num_threads: Option<usize>,
-    ) -> (&'py PyArray1<f64>, &'py PyArray1<f64>) {
+    ) -> (Bound<'py, PyArray1<f64>>, Bound<'py, PyArray1<f64>>) {
         let krige_mat = krige_mat.as_array();
         let krig_vecs = krig_vecs.as_array();
         let cond = cond.as_array();
         let (field, error) =
             calculator_field_krige_and_variance(krige_mat, krig_vecs, cond, num_threads);
-        let field = field.into_pyarray(py);
-        let error = error.into_pyarray(py);
+        let field = field.into_pyarray_bound(py);
+        let error = error.into_pyarray_bound(py);
         (field, error)
     }
 
@@ -110,11 +110,11 @@ fn gstools_core(_py: Python<'_>, m: &PyModule) -> PyResult<()> {
         krig_vecs: PyReadonlyArray2<f64>,
         cond: PyReadonlyArray1<f64>,
         num_threads: Option<usize>,
-    ) -> &'py PyArray1<f64> {
+    ) -> Bound<'py, PyArray1<f64>> {
         let krige_mat = krige_mat.as_array();
         let krig_vecs = krig_vecs.as_array();
         let cond = cond.as_array();
-        calculator_field_krige(krige_mat, krig_vecs, cond, num_threads).into_pyarray(py)
+        calculator_field_krige(krige_mat, krig_vecs, cond, num_threads).into_pyarray_bound(py)
     }
 
     #[pyfn(m)]
@@ -124,10 +124,10 @@ fn gstools_core(_py: Python<'_>, m: &PyModule) -> PyResult<()> {
         f: PyReadonlyArray2<f64>,
         estimator_type: Option<char>,
         num_threads: Option<usize>,
-    ) -> &'py PyArray1<f64> {
+    ) -> Bound<'py, PyArray1<f64>> {
         let f = f.as_array();
         let estimator_type = estimator_type.unwrap_or('m');
-        variogram_structured(f, estimator_type, num_threads).into_pyarray(py)
+        variogram_structured(f, estimator_type, num_threads).into_pyarray_bound(py)
     }
 
     #[pyfn(m)]
@@ -138,11 +138,11 @@ fn gstools_core(_py: Python<'_>, m: &PyModule) -> PyResult<()> {
         mask: PyReadonlyArray2<bool>,
         estimator_type: Option<char>,
         num_threads: Option<usize>,
-    ) -> &'py PyArray1<f64> {
+    ) -> Bound<'py, PyArray1<f64>> {
         let f = f.as_array();
         let mask = mask.as_array();
         let estimator_type = estimator_type.unwrap_or('m');
-        variogram_ma_structured(f, mask, estimator_type, num_threads).into_pyarray(py)
+        variogram_ma_structured(f, mask, estimator_type, num_threads).into_pyarray_bound(py)
     }
 
     #[pyfn(m)]
@@ -159,7 +159,7 @@ fn gstools_core(_py: Python<'_>, m: &PyModule) -> PyResult<()> {
         separate_dirs: Option<bool>,
         estimator_type: Option<char>,
         num_threads: Option<usize>,
-    ) -> (&'py PyArray2<f64>, &'py PyArray2<u64>) {
+    ) -> (Bound<'py, PyArray2<f64>>, Bound<'py, PyArray2<u64>>) {
         let f = f.as_array();
         let bin_edges = bin_edges.as_array();
         let pos = pos.as_array();
@@ -179,8 +179,8 @@ fn gstools_core(_py: Python<'_>, m: &PyModule) -> PyResult<()> {
             estimator_type,
             num_threads,
         );
-        let variogram = variogram.into_pyarray(py);
-        let counts = counts.into_pyarray(py);
+        let variogram = variogram.into_pyarray_bound(py);
+        let counts = counts.into_pyarray_bound(py);
 
         (variogram, counts)
     }
@@ -195,7 +195,7 @@ fn gstools_core(_py: Python<'_>, m: &PyModule) -> PyResult<()> {
         estimator_type: Option<char>,
         distance_type: Option<char>,
         num_threads: Option<usize>,
-    ) -> (&'py PyArray1<f64>, &'py PyArray1<u64>) {
+    ) -> (Bound<'py, PyArray1<f64>>, Bound<'py, PyArray1<u64>>) {
         let f = f.as_array();
         let bin_edges = bin_edges.as_array();
         let pos = pos.as_array();
@@ -209,8 +209,8 @@ fn gstools_core(_py: Python<'_>, m: &PyModule) -> PyResult<()> {
             distance_type,
             num_threads,
         );
-        let variogram = variogram.into_pyarray(py);
-        let counts = counts.into_pyarray(py);
+        let variogram = variogram.into_pyarray_bound(py);
+        let counts = counts.into_pyarray_bound(py);
 
         (variogram, counts)
     }
