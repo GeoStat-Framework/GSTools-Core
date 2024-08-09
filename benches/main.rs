@@ -10,14 +10,14 @@ use ndarray_rand::{
     RandomExt,
 };
 
-use gstools_core::field::{summator, summator_incompr};
+use gstools_core::field::{summator, summator_fourier, summator_incompr};
 use gstools_core::krige::{calculator_field_krige, calculator_field_krige_and_variance};
 use gstools_core::variogram::{
     variogram_directional, variogram_ma_structured, variogram_structured, variogram_unstructured,
 };
 
 fn read_1d_from_file(file_path: &Path) -> Array1<f64> {
-    let file = File::open(file_path).expect("File wasn't found");
+    let file = File::open(file_path).expect("File wasn't found, run `gen_benchmark_inputs.py`");
     let reader = BufReader::new(file);
 
     reader
@@ -27,7 +27,7 @@ fn read_1d_from_file(file_path: &Path) -> Array1<f64> {
 }
 
 fn read_2d_from_file(file_path: &Path) -> Array2<f64> {
-    let file = File::open(file_path).expect("File wasn't found");
+    let file = File::open(file_path).expect("File wasn't found, run `gen_benchmark_inputs.py`");
     let reader = BufReader::new(file);
 
     let mut vec = Vec::new();
@@ -54,19 +54,80 @@ pub fn field_benchmark(c: &mut Criterion) {
     let y = read_1d_from_file(&path.join("field_y.txt"));
     let z = read_1d_from_file(&path.join("field_z.txt"));
 
-    let pos = stack![Axis(0), x, y, z];
+    let pos_2d = stack![Axis(0), x, y];
+    let pos_3d = stack![Axis(0), x, y, z];
 
-    let cov_samples = read_2d_from_file(&path.join("field_cov_samples.txt"));
+    let cov_samples_2d = read_2d_from_file(&path.join("field_cov_samples_2d.txt"));
+    let cov_samples_3d = read_2d_from_file(&path.join("field_cov_samples_3d.txt"));
 
     let z_1 = read_1d_from_file(&path.join("field_z_1.txt"));
     let z_2 = read_1d_from_file(&path.join("field_z_2.txt"));
+    let z_1_fourier = read_1d_from_file(&path.join("field_fourier_z_1.txt"));
+    let z_2_fourier = read_1d_from_file(&path.join("field_fourier_z_2.txt"));
 
-    c.bench_function("field summate", |b| {
-        b.iter(|| summator(cov_samples.view(), z_1.view(), z_2.view(), pos.view(), None))
+    let spectrum_factor_2d = read_1d_from_file(&path.join("field_fourier_factor_2d.txt"));
+
+    let modes_2d = read_2d_from_file(&path.join("field_fourier_modes_2d.txt"));
+
+    c.bench_function("field summate 2d", |b| {
+        b.iter(|| {
+            summator(
+                cov_samples_2d.view(),
+                z_1.view(),
+                z_2.view(),
+                pos_2d.view(),
+                None,
+            )
+        })
     });
 
-    c.bench_function("field summate incompr", |b| {
-        b.iter(|| summator_incompr(cov_samples.view(), z_1.view(), z_2.view(), pos.view(), None))
+    c.bench_function("field summate 3d", |b| {
+        b.iter(|| {
+            summator(
+                cov_samples_3d.view(),
+                z_1.view(),
+                z_2.view(),
+                pos_3d.view(),
+                None,
+            )
+        })
+    });
+
+    c.bench_function("field summate incompr 2d", |b| {
+        b.iter(|| {
+            summator_incompr(
+                cov_samples_2d.view(),
+                z_1.view(),
+                z_2.view(),
+                pos_2d.view(),
+                None,
+            )
+        })
+    });
+
+    c.bench_function("field summate incompr 3d", |b| {
+        b.iter(|| {
+            summator_incompr(
+                cov_samples_3d.view(),
+                z_1.view(),
+                z_2.view(),
+                pos_3d.view(),
+                None,
+            )
+        })
+    });
+
+    c.bench_function("field summate Fourier 2d", |b| {
+        b.iter(|| {
+            summator_fourier(
+                spectrum_factor_2d.view(),
+                modes_2d.view(),
+                z_1_fourier.view(),
+                z_2_fourier.view(),
+                pos_2d.view(),
+                None,
+            )
+        })
     });
 }
 

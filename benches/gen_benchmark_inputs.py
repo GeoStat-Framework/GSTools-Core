@@ -4,25 +4,33 @@
 from pathlib import Path
 import numpy as np
 import gstools as gs
-from gstools.field.generator import RandMeth, IncomprRandMeth
+from gstools.field.generator import RandMeth, IncomprRandMeth, Fourier
 
 
 def gen_field_summate(path, seed):
-    pos_no = 100_000
+    pos_no = 10_000
     mode_no = 1_000
     x = np.linspace(0.0, 10.0, pos_no)
     y = np.linspace(-5.0, 5.0, pos_no)
     z = np.linspace(-6.0, 8.0, pos_no)
 
-    model = gs.Gaussian(dim=3, var=1.0, len_scale=1.0)
+    model_2d = gs.Gaussian(dim=2, var=1.0, len_scale=1.0)
+    model_3d = gs.Gaussian(dim=3, var=1.0, len_scale=1.0)
 
-    rm = RandMeth(model, mode_no, seed)
+    rm_2d = RandMeth(model_2d, mode_no=mode_no, seed=seed)
+    rm_3d = RandMeth(model_3d, mode_no=mode_no, seed=seed)
+    f_2d = Fourier(model_2d, period=[10.0, 10.0] , seed=seed)
     np.savetxt(path / 'field_x.txt', x)
     np.savetxt(path / 'field_y.txt', y)
     np.savetxt(path / 'field_z.txt', z)
-    np.savetxt(path / 'field_cov_samples.txt', rm._cov_sample)
-    np.savetxt(path / 'field_z_1.txt', rm._z_1)
-    np.savetxt(path / 'field_z_2.txt', rm._z_2)
+    np.savetxt(path / 'field_cov_samples_2d.txt', rm_2d._cov_sample)
+    np.savetxt(path / 'field_cov_samples_3d.txt', rm_3d._cov_sample)
+    np.savetxt(path / 'field_z_1.txt', rm_2d._z_1)
+    np.savetxt(path / 'field_z_2.txt', rm_2d._z_2)
+    np.savetxt(path / 'field_fourier_z_1.txt', f_2d._z_1)
+    np.savetxt(path / 'field_fourier_z_2.txt', f_2d._z_2)
+    np.savetxt(path / 'field_fourier_factor_2d.txt', f_2d._spectrum_factor)
+    np.savetxt(path / 'field_fourier_modes_2d.txt', f_2d._modes)
 
 def gen_krige(path, seed):
     def prepare_data(pos_no, cond_no):
