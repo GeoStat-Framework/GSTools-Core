@@ -68,6 +68,11 @@ jobs:
           target: ${{ matrix.target }}
           manylinux: auto
           args: --release --out dist
+      - name: Check Dependencies Maturin
+        run: |
+          pkg-config --version
+          openssl version -d
+          openssl version
       - name: Install built wheel
         if: matrix.target == 'x86_64'
         run: |
