@@ -57,6 +57,11 @@ jobs:
           sudo apt-get update
           sudo apt-get upgrade
           sudo apt-get install pkg-config libssl-dev
+      - name: Check Dependencies
+        run: |
+          pkg-config --version
+          openssl version -d
+          openssl version
       - name: Build Wheels
         uses: messense/maturin-action@v1
         with:
