@@ -32,7 +32,11 @@ codegen-units = 1
 pyo3 = { version = "0.21", features = ["abi3-py310", "extension-module"] }
 numpy = "0.21"
 ndarray = { version = "0.15", features = ["rayon", "approx-0_5"] }
+# "openblas-static" needs gcc, gfortran, and make installed
+ndarray-linalg = { version = "0.16", features = ["openblas-static"] }
 rayon = "1.10"
+special = "0.11"
+plotters = "0.3"
 
 [dev-dependencies]
 criterion = { version = "0.5", features = ["html_reports"] }

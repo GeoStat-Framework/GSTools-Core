@@ -8,7 +8,7 @@ from gstools.field.generator import RandMeth, IncomprRandMeth, Fourier
 
 
 def gen_field_summate(path, seed):
-    pos_no = 10_000
+    pos_no = 1_000
     mode_no = 1_000
     x = np.linspace(0.0, 10.0, pos_no)
     y = np.linspace(-5.0, 5.0, pos_no)
@@ -58,7 +58,7 @@ def gen_krige(path, seed):
 
         return krige_mat, k_vec, krige_cond
 
-    krige_mat, k_vec, krige_cond = prepare_data(pos_no=10_000, cond_no=500)
+    krige_mat, k_vec, krige_cond = prepare_data(pos_no=1_000, cond_no=300)
 
     np.savetxt(path / 'krige_krige_mat.txt', krige_mat)
     np.savetxt(path / 'krige_k_vec.txt', k_vec)

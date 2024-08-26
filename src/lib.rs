@@ -21,6 +21,7 @@ use variogram::{
     variogram_directional, variogram_ma_structured, variogram_structured, variogram_unstructured,
 };
 
+pub mod cov_model;
 pub mod field;
 pub mod krige;
 mod short_vec;

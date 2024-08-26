@@ -11,6 +11,7 @@ use ndarray_rand::{
 };
 
 use gstools_core::field::{summator, summator_fourier, summator_incompr};
+use gstools_core::krige::methods::cdist;
 use gstools_core::krige::{calculator_field_krige, calculator_field_krige_and_variance};
 use gstools_core::variogram::{
     variogram_directional, variogram_ma_structured, variogram_structured, variogram_unstructured,
@@ -210,10 +211,27 @@ pub fn variogram_benchmark(c: &mut Criterion) {
     });
 }
 
+pub fn covmodel_benchmark(c: &mut Criterion) {
+    let a_ordered = arr2(&[[0.3, 1.9, 1.1, 3.3, 4.7, 5.3, 10.0, 12.8, 15.764, 20.0, 20.0]]);
+    c.bench_function("cdist ordered", |b| {
+        b.iter(|| cdist(a_ordered.view(), a_ordered.view()))
+    });
+    let a_rand = arr2(&[[
+        10.3, 1.9, 11.1, 33.3, 4.7, 15.3, 10.0, 22.8, 5.764, 2.0, 2.1,
+    ]]);
+    c.bench_function("cdist ordered", |b| {
+        b.iter(|| cdist(a_rand.view(), a_rand.view()))
+    });
+    c.bench_function("cdist mix", |b| {
+        b.iter(|| cdist(a_ordered.view(), a_rand.view()))
+    });
+}
+
 criterion_group!(
     benches,
     field_benchmark,
     krige_benchmark,
-    variogram_benchmark
+    variogram_benchmark,
+    covmodel_benchmark,
 );
 criterion_main!(benches);
