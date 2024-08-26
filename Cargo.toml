@@ -37,6 +37,7 @@ ndarray-linalg = { version = "0.16", features = ["openblas-static"] }
 rayon = "1.10"
 special = "0.11"
 plotters = "0.3"
+openssl = { version = "0.10", features = ["vendored"] }
 
 [dev-dependencies]
 criterion = { version = "0.5", features = ["html_reports"] }
