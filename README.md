@@ -16,6 +16,13 @@ This crate includes
 The documentation can be found [here][doc_link].
 
 
+## Usage
+
+You probably don't want to use this software directly, as it is the computational
+backend of GSTools. See the [installation guide][gstools_installation] on how to
+use this backend with GSTools.
+
+
 ## Contact
 
 You can contact us via <info@geostat-framework.org>.
@@ -23,9 +30,10 @@ You can contact us via <info@geostat-framework.org>.
 
 ## License
 
-[LGPLv3][license_link] © 2021-2024
+[LGPLv3][license_link] © 2021-2025
 
 
 [gstools_link]: https://github.com/GeoStat-Framework/GSTools
+[gstools_installation]: https://geostat-framework.readthedocs.io/projects/gstools/en/latest/#installation
 [doc_link]: https://docs.rs/gstools-core/latest/gstools_core/
 [license_link]: https://github.com/GeoStat-Framework/GSTools-Core/blob/main/LICENSE
