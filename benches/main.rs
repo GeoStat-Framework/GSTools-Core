@@ -1,8 +1,9 @@
 use std::fs::File;
+use std::hint::black_box;
 use std::io::{BufRead, BufReader};
 use std::path::Path;
 
-use criterion::{black_box, criterion_group, criterion_main, Criterion};
+use criterion::{criterion_group, criterion_main, Criterion};
 use ndarray::{arr2, stack, Array1, Array2, Axis};
 use ndarray_rand::{
     rand::{rngs::SmallRng, SeedableRng},
