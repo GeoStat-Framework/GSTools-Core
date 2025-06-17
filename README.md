@@ -1,5 +1,7 @@
 # GSTools Core
 
+
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.15684753.svg)](https://doi.org/10.5281/zenodo.15684753)
 [![PyPI version](https://img.shields.io/pypi/v/gstools-core.svg)](https://pypi.org/project/gstools-core/)
 [![Crates version](https://img.shields.io/crates/v/gstools-core.svg)](https://crates.io/crates/gstools-core)
 [![Docs](https://docs.rs/gstools-core/badge.svg)](https://docs.rs/gstools-core)
