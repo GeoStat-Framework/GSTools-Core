@@ -118,7 +118,7 @@ impl Distance for Haversine {
     }
 
     fn check_dim(dim: usize) {
-        assert_eq!(dim, 2, "Haversine: dim = {} != 2", dim);
+        assert_eq!(dim, 2, "Haversine: dim = {dim} != 2");
     }
 }
 
