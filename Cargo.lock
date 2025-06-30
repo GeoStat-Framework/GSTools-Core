@@ -197,7 +197,7 @@ dependencies = [
 
 [[package]]
 name = "gstools-core"
-version = "1.0.0"
+version = "1.1.0"
 dependencies = [
  "approx",
  "criterion",
