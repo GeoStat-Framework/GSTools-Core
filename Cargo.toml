@@ -1,6 +1,6 @@
 [package]
 name = "gstools-core"
-version = "1.3.0"
+version = "1.4.0"
 authors = ["Lennart Schüler <lennart.schueler@ufz.de>"]
 edition = "2021"
 description = "The core functions of GSTools"
@@ -33,6 +33,11 @@ pyo3 = { version = "0.28", features = ["abi3-py38", "extension-module"] }
 numpy = "0.28"
 ndarray = { version = "0.17", features = ["rayon", "approx"] }
 rayon = "1.10"
+kdtree = "0.8.1"
+nalgebra = "0.35.0"
+scirs2-special = "0.6.5"
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.151"
 
 [dev-dependencies]
 criterion = { version = "0.8", features = ["html_reports"] }

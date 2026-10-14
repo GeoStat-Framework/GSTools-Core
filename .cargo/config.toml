@@ -1,0 +1,13 @@
+# PyO3's `extension-module` feature (the default for this crate, see
+# Cargo.toml) tells PyO3 not to link against libpython directly -- those
+# symbols are meant to be resolved by the Python interpreter at import
+# time, the way `maturin` builds and loads this crate. Plain `cargo
+# build`/`cargo test` on macOS don't get maturin's linker setup, so
+# Apple's `ld` fails on the unresolved Python C-API symbols unless told to
+# defer them to runtime, same as `maturin` already does under the hood.
+# See the PyO3 FAQ: https://pyo3.rs/main/faq
+[target.x86_64-apple-darwin]
+rustflags = ["-C", "link-arg=-undefined", "-C", "link-arg=dynamic_lookup"]
+
+[target.aarch64-apple-darwin]
+rustflags = ["-C", "link-arg=-undefined", "-C", "link-arg=dynamic_lookup"]

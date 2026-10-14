@@ -14,6 +14,9 @@
 
 use pyo3::prelude::pymodule;
 
+pub mod covmodel;
+pub mod local_krige;
+pub mod covmodel_spec;
 pub mod field;
 pub mod krige;
 mod short_vec;
@@ -21,6 +24,8 @@ pub mod variogram;
 
 #[pymodule]
 mod gstools_core {
+    use crate::covmodel::CovModel;
+    use crate::local_krige::calc_field_krige_local;
     use crate::field::{summator, summator_fourier, summator_incompr};
     use crate::krige::{calculator_field_krige, calculator_field_krige_and_variance};
     use crate::variogram::{
@@ -28,6 +33,7 @@ mod gstools_core {
         variogram_unstructured,
     };
     use numpy::{IntoPyArray, PyArray1, PyArray2, PyReadonlyArray1, PyReadonlyArray2};
+    use pyo3::exceptions::PyValueError;
     use pyo3::prelude::*;
 
     #[pymodule_init]
@@ -116,6 +122,47 @@ mod gstools_core {
         let krig_vecs = krig_vecs.as_array();
         let cond = cond.as_array();
         calculator_field_krige(krige_mat, krig_vecs, cond, num_threads).into_pyarray(py)
+    }
+
+    #[pyfunction(name = "calc_field_krige_local")]
+    #[allow(clippy::too_many_arguments)]
+    fn calc_field_krige_local_py<'py>(
+        py: Python<'py>,
+        cond_pos: PyReadonlyArray2<f64>,
+        cond_val: PyReadonlyArray1<f64>,
+        target_pos: PyReadonlyArray2<f64>,
+        cov_model_json: &str,
+        cond_err: PyReadonlyArray1<f64>,
+        drift_cond: PyReadonlyArray2<f64>,
+        drift_target: PyReadonlyArray2<f64>,
+        unbiased: bool,
+        exact: bool,
+        local_radius: f64,
+        num_threads: Option<usize>,
+    ) -> PyResult<(Bound<'py, PyArray1<f64>>, Bound<'py, PyArray1<f64>>)> {
+        let model = CovModel::from_json(cov_model_json)
+            .map_err(|e| PyValueError::new_err(e.to_string()))?;
+        let cond_pos = cond_pos.as_array();
+        let cond_val = cond_val.as_array();
+        let target_pos = target_pos.as_array();
+        let cond_err = cond_err.as_array();
+        let drift_cond = drift_cond.as_array();
+        let drift_target = drift_target.as_array();
+        let (field, error) = calc_field_krige_local(
+            cond_pos,
+            cond_val,
+            target_pos,
+            &model,
+            cond_err,
+            drift_cond,
+            drift_target,
+            unbiased,
+            exact,
+            local_radius,
+            num_threads,
+        )
+        .map_err(|e| PyValueError::new_err(e.to_string()))?;
+        Ok((field.into_pyarray(py), error.into_pyarray(py)))
     }
 
     #[pyfunction(name = "variogram_structured")]
