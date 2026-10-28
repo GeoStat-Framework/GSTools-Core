@@ -227,7 +227,7 @@ pub fn solve_dense(
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct SingularSystem;
 
-fn euclidean_dist(a: ArrayView1<'_, f64>, b: ArrayView1<'_, f64>) -> f64 {
+pub(crate) fn euclidean_dist(a: ArrayView1<'_, f64>, b: ArrayView1<'_, f64>) -> f64 {
     a.iter()
         .zip(b.iter()) // (&f64, &f64)
         .map(|(x, y)| (x - y) * (x - y)) // |(x, y)| is type for closure

@@ -16,6 +16,7 @@ use pyo3::prelude::pymodule;
 
 pub mod covmodel;
 pub mod local_krige;
+pub mod local_krige_multi;
 pub mod covmodel_spec;
 pub mod field;
 pub mod krige;
@@ -26,6 +27,7 @@ pub mod variogram;
 mod gstools_core {
     use crate::covmodel::CovModel;
     use crate::local_krige::calc_field_krige_local;
+    use crate::local_krige_multi::{calc_field_krige_local_multi, CacheMode};
     use crate::field::{summator, summator_fourier, summator_incompr};
     use crate::krige::{calculator_field_krige, calculator_field_krige_and_variance};
     use crate::variogram::{
@@ -35,6 +37,7 @@ mod gstools_core {
     use numpy::{IntoPyArray, PyArray1, PyArray2, PyReadonlyArray1, PyReadonlyArray2};
     use pyo3::exceptions::PyValueError;
     use pyo3::prelude::*;
+    use pyo3::types::PyDict;
 
     #[pymodule_init]
     fn init(m: &Bound<'_, PyModule>) -> PyResult<()> {
@@ -163,6 +166,70 @@ mod gstools_core {
         )
         .map_err(|e| PyValueError::new_err(e.to_string()))?;
         Ok((field.into_pyarray(py), error.into_pyarray(py)))
+    }
+
+    /// Local kriging of many fields (columns of `cond_val`, NaN = missing)
+    /// with cached weights. Returns `(field, error, n_used, stats)`, the
+    /// arrays with shape `(n_targets, n_fields)`.
+    #[pyfunction(name = "calc_field_krige_local_multi")]
+    #[pyo3(signature = (
+        cond_pos, cond_val, target_pos, cov_model_json, cond_err, drift_cond,
+        drift_target, unbiased, exact, local_radius, min_neighbors=1,
+        cache="hash", num_threads=None
+    ))]
+    #[allow(clippy::too_many_arguments, clippy::type_complexity)]
+    fn calc_field_krige_local_multi_py<'py>(
+        py: Python<'py>,
+        cond_pos: PyReadonlyArray2<f64>,
+        cond_val: PyReadonlyArray2<f64>,
+        target_pos: PyReadonlyArray2<f64>,
+        cov_model_json: &str,
+        cond_err: PyReadonlyArray1<f64>,
+        drift_cond: PyReadonlyArray2<f64>,
+        drift_target: PyReadonlyArray2<f64>,
+        unbiased: bool,
+        exact: bool,
+        local_radius: f64,
+        min_neighbors: usize,
+        cache: &str,
+        num_threads: Option<usize>,
+    ) -> PyResult<(
+        Bound<'py, PyArray2<f64>>,
+        Bound<'py, PyArray2<f64>>,
+        Bound<'py, PyArray2<u32>>,
+        Bound<'py, PyDict>,
+    )> {
+        let model = CovModel::from_json(cov_model_json)
+            .map_err(|e| PyValueError::new_err(e.to_string()))?;
+        let cache: CacheMode = cache.parse().map_err(PyValueError::new_err)?;
+        let res = calc_field_krige_local_multi(
+            cond_pos.as_array(),
+            cond_val.as_array(),
+            target_pos.as_array(),
+            &model,
+            cond_err.as_array(),
+            drift_cond.as_array(),
+            drift_target.as_array(),
+            unbiased,
+            exact,
+            local_radius,
+            min_neighbors,
+            cache,
+            num_threads,
+        )
+        .map_err(|e| PyValueError::new_err(e.to_string()))?;
+        let stats = PyDict::new(py);
+        stats.set_item("n_solves", res.stats.n_solves)?;
+        stats.set_item("n_hits_last", res.stats.n_hits_last)?;
+        stats.set_item("n_hits_hash", res.stats.n_hits_hash)?;
+        stats.set_item("n_skipped", res.stats.n_skipped)?;
+        stats.set_item("max_masks_per_target", res.stats.max_masks_per_target)?;
+        Ok((
+            res.field.into_pyarray(py),
+            res.error.into_pyarray(py),
+            res.n_used.into_pyarray(py),
+            stats,
+        ))
     }
 
     #[pyfunction(name = "variogram_structured")]
