@@ -20,10 +20,11 @@
 //! Unlike global kriging (see `krige.rs`), local kriging needs an actual
 //! dense solve per target point (each neighborhood is a different small
 //! system) -- there is no pre-inverted matrix to just contract against.
-//! [`solve_dense`] uses `nalgebra`'s partial-pivoted `LU` for the common
-//! (well-conditioned) case, falling back to an `SVD`-based least-squares
-//! solve -- analogous to NumPy's `lstsq` in the Python prototype -- for
-//! singular systems.
+//! The systems are solved by [`solve_kriging`](crate::kriging_solve::solve_kriging):
+//! Cholesky of the covariance block plus a small Schur complement system
+//! (`faer`), falling back to [`solve_dense`] -- `nalgebra`'s
+//! partial-pivoted `LU`, then an `SVD`-based least-squares solve analogous
+//! to NumPy's `lstsq` in the Python prototype -- for singular systems.
 
 use std::fmt;
 
@@ -33,6 +34,7 @@ use ndarray::{Array1, Array2, ArrayView1, ArrayView2, Axis};
 use rayon::prelude::*;
 
 use crate::covmodel::CovModel;
+use crate::kriging_solve::solve_kriging;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum LocalKrigeError {
@@ -180,9 +182,10 @@ const LSTSQ_EPS: f64 = 1e-12;
 /// returns a fresh `Array1`), so it is independently testable with plain
 /// literal matrices, unrelated to kriging.
 ///
-/// Local kriging systems are small (a handful to a few hundred neighbors),
-/// so this is not a performance bottleneck compared to the covariance
-/// evaluations that build `a`.
+/// Kriging systems are normally solved by the faster
+/// [`solve_kriging`](crate::kriging_solve::solve_kriging) (Cholesky + Schur
+/// complement); this general solver is its fallback when the covariance
+/// block is not positive definite.
 ///
 /// Tries `nalgebra::linalg::LU` (partial-pivoted Gaussian elimination)
 /// first -- cheap, and sufficient for the well-conditioned case (nugget >
@@ -341,7 +344,7 @@ pub fn calc_field_krige_local(
         let rhs: Array1<f64> =
             build_local_rhs(&nbr_dists, model, exact, unbiased, drift_target.column(j));
 
-        let weights: Array1<f64> = solve_dense(lhs.view(), rhs.view())
+        let weights: Array1<f64> = solve_kriging(lhs.view(), rhs.view(), k)
             .map_err(|_| LocalKrigeError::SingularSystem { target_index: j })?;
 
         let pad = drift_target.nrows() + unbiased as usize;

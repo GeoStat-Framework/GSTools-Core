@@ -15,6 +15,7 @@
 use pyo3::prelude::pymodule;
 
 pub mod covmodel;
+pub mod kriging_solve;
 pub mod local_krige;
 pub mod local_krige_multi;
 pub mod covmodel_spec;

@@ -29,10 +29,11 @@ use std::fmt;
 use std::str::FromStr;
 
 use kdtree::{distance::squared_euclidean, KdTree};
-use ndarray::{Array1, Array2, ArrayView1, ArrayView2, ArrayViewMut1, Axis};
+use ndarray::{Array2, ArrayView1, ArrayView2, ArrayViewMut1, Axis};
 use rayon::prelude::*;
 
 use crate::covmodel::CovModel;
+use crate::kriging_solve::{solve_cholesky_schur, with_workspace};
 use crate::local_krige::{euclidean_dist, solve_dense};
 
 /// How kriging weights are reused between the fields of one target.
@@ -94,8 +95,8 @@ impl MultiStats {
 pub enum LocalKrigeMultiError {
     /// Inconsistent array shapes or non-finite positions / radius.
     InvalidInput(String),
-    /// A local system could not be solved, even by the least-squares
-    /// fallback of [`solve_dense`].
+    /// A local system could not be solved, neither by the Cholesky solver
+    /// nor by the LU / least-squares fallback of [`solve_dense`].
     SingularSystem {
         /// index of the target point
         target_index: usize,
@@ -446,38 +447,63 @@ impl FullSystem {
         let sel = selected(key, nbrs.len());
         let kt = sel.len();
         let drift_no = ctx.drift_cond.nrows();
-        let size = kt + ctx.unbiased as usize + drift_no;
+        let unb = ctx.unbiased as usize;
+        let p = unb + drift_no;
 
-        let mut lhs = Array2::<f64>::zeros((size, size));
-        let mut rhs = Array1::<f64>::zeros(size);
+        // right-hand side [r; f]
+        let mut rhs = vec![0.0; kt + p];
         for (a, &ia) in sel.iter().enumerate() {
             rhs[a] = self.rhs[ia];
-            for (b, &ib) in sel.iter().enumerate() {
-                lhs[[a, b]] = self.cov[[ia, ib]];
-            }
         }
         if ctx.unbiased {
-            for a in 0..kt {
-                lhs[[kt, a]] = 1.0;
-                lhs[[a, kt]] = 1.0;
-            }
             rhs[kt] = 1.0;
         }
-        let offset = kt + ctx.unbiased as usize;
         for d in 0..drift_no {
-            for (a, &ia) in sel.iter().enumerate() {
-                let v = ctx.drift_cond[[d, nbrs[ia]]];
-                lhs[[offset + d, a]] = v;
-                lhs[[a, offset + d]] = v;
-            }
-            rhs[offset + d] = ctx.drift_target[[d, j]];
+            rhs[kt + unb + d] = ctx.drift_target[[d, j]];
         }
+        // constraint column q of neighbor a: 1 (unbiasedness) or drift value
+        let con = |a: usize, q: usize| {
+            if q < unb {
+                1.0
+            } else {
+                ctx.drift_cond[[q - unb, nbrs[sel[a]]]]
+            }
+        };
 
-        let weights = solve_dense(lhs.view(), rhs.view()).ok()?;
+        // Cholesky + Schur complement on the selected rows/columns
+        let mut x = Vec::with_capacity(kt + p);
+        let ok = with_workspace(|ws| {
+            solve_cholesky_schur(
+                ws,
+                kt,
+                p,
+                |a, b| self.cov[[sel[a], sel[b]]],
+                con,
+                &rhs,
+                &mut x,
+            )
+        });
+        if !ok {
+            // fallback: full system with LU, then SVD least squares
+            let size = kt + p;
+            let mut lhs = Array2::<f64>::zeros((size, size));
+            for a in 0..kt {
+                for b in 0..kt {
+                    lhs[[a, b]] = self.cov[[sel[a], sel[b]]];
+                }
+                for q in 0..p {
+                    lhs[[a, kt + q]] = con(a, q);
+                    lhs[[kt + q, a]] = con(a, q);
+                }
+            }
+            x = solve_dense(lhs.view(), ArrayView1::from(&rhs))
+                .ok()?
+                .to_vec();
+        }
         Some(CacheEntry {
             stations: sel.iter().map(|&i| nbrs[i]).collect(),
-            weights: weights.iter().take(kt).copied().collect(),
-            error: rhs.dot(&weights),
+            weights: x[..kt].to_vec(),
+            error: rhs.iter().zip(&x).map(|(r, w)| r * w).sum(),
         })
     }
 }
@@ -564,6 +590,7 @@ mod tests {
     use super::*;
     use crate::covmodel_spec::CovModelSpec;
     use crate::local_krige::calc_field_krige_local;
+    use ndarray::Array1;
     use ndarray::{array, s};
 
     const FULL_RADIUS: f64 = 1e6;

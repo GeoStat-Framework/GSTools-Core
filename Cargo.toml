@@ -35,6 +35,8 @@ ndarray = { version = "0.17", features = ["rayon", "approx"] }
 rayon = "1.10"
 kdtree = "0.8.1"
 nalgebra = "0.35.0"
+# Cholesky for the local kriging systems (single-threaded per solve, no default features)
+faer = { version = "0.24", default-features = false, features = ["std", "linalg"] }
 scirs2-special = "0.6.5"
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.151"
