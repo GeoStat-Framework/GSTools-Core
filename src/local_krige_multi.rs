@@ -23,6 +23,20 @@
 //! Each target is handled by one task from start to end and writes only
 //! its own output row, so there is no synchronization between threads,
 //! and the cache only lives while that target is processed.
+//!
+//! # Small neighborhoods
+//!
+//! ```text
+//! n = neighbors with data in this field,  p = unbiased + drift terms
+//!
+//! n < min_neighbors  ->  NaN
+//! n <= p             ->  ALL DRIFT TERMS DROPPED: ordinary kriging
+//!                        (simple kriging if not unbiased)
+//! otherwise          ->  kriging as requested
+//! ```
+//!
+//! See [`drift_terms_used`] for why. Which case applies depends only on
+//! `n`, so it is part of the cached solution of a neighbor mask.
 
 use std::collections::HashMap;
 use std::fmt;
@@ -33,7 +47,7 @@ use ndarray::{Array2, ArrayView1, ArrayView2, ArrayViewMut1, Axis};
 use rayon::prelude::*;
 
 use crate::covmodel::CovModel;
-use crate::kriging_solve::{solve_cholesky_schur, with_workspace};
+use crate::kriging_solve::{drift_terms_used, solve_cholesky_schur, with_workspace};
 use crate::local_krige::{euclidean_dist, solve_dense};
 
 /// How kriging weights are reused between the fields of one target.
@@ -74,6 +88,10 @@ pub struct MultiStats {
     pub n_hits_hash: usize,
     /// (target, field) pairs left as NaN (fewer than `min_neighbors`).
     pub n_skipped: usize,
+    /// (target, field) pairs kriged **without drift** because there were
+    /// not more neighbors with data than constraints (see
+    /// [`drift_terms_used`]). Always 0 without drift terms.
+    pub n_without_drift: usize,
     /// Largest number of distinct masks cached for one target.
     pub max_masks_per_target: usize,
 }
@@ -85,6 +103,7 @@ impl MultiStats {
             n_hits_last: self.n_hits_last + other.n_hits_last,
             n_hits_hash: self.n_hits_hash + other.n_hits_hash,
             n_skipped: self.n_skipped + other.n_skipped,
+            n_without_drift: self.n_without_drift + other.n_without_drift,
             max_masks_per_target: self.max_masks_per_target.max(other.max_masks_per_target),
         }
     }
@@ -127,11 +146,14 @@ impl std::error::Error for LocalKrigeMultiError {}
 /// `(m, T)`: one row per target point, one column per field.
 #[derive(Debug, Clone)]
 pub struct LocalKrigeMultiResult {
-    /// Raw kriging estimate, NaN where fewer than `min_neighbors` were available.
+    /// Raw kriging estimate, NaN where fewer than `min_neighbors` were
+    /// available. Kriged without drift where `n_used <= unbiased + drift
+    /// terms` (see [`drift_terms_used`]).
     pub field: Array2<f64>,
     /// Raw `rhs . weights` (not yet `sill - error`), NaN like `field`.
     pub error: Array2<f64>,
-    /// Number of available neighbors per target and field.
+    /// Number of available neighbors per target and field. Tells which
+    /// rule of the module docs applied (NaN, without drift, as requested).
     pub n_used: Array2<u32>,
     /// Cache statistics.
     pub stats: MultiStats,
@@ -156,6 +178,15 @@ pub struct LocalKrigeMultiResult {
 ///   (values below 1 are treated as 1)
 /// * `cache` - see [`CacheMode`]
 /// * `num_threads` - number of threads, `None` for rayon's global pool
+///
+/// # Small neighborhoods
+/// Per target and field, with `n` neighbors with data and
+/// `p = unbiased + drift terms` constraints:
+/// * `n < min_neighbors`: NaN.
+/// * `n <= p`: **all drift terms are dropped**, the value is ordinary
+///   kriging (simple kriging if `unbiased` is false). Counted in
+///   [`MultiStats::n_without_drift`]. See [`drift_terms_used`].
+/// * otherwise: kriging as requested.
 ///
 /// # Returns
 /// A [`LocalKrigeMultiResult`]. Unlike the single-field function, a target
@@ -327,6 +358,11 @@ fn krige_target(
             stats.n_skipped += 1;
             continue;
         }
+        // too few neighbors for the drift: solved without drift (see
+        // `drift_terms_used`; done in `solve_subsystem`, counted here)
+        if drift_terms_used(count, ctx.unbiased, ctx.drift_cond.nrows()) < ctx.drift_cond.nrows() {
+            stats.n_without_drift += 1;
+        }
 
         let cached = if ctx.cache != CacheMode::None && last_idx.is_some() && key == last_key {
             stats.n_hits_last += 1;
@@ -437,6 +473,9 @@ impl FullSystem {
     /// rows/columns of the full matrices (no covariance evaluations).
     /// Layout as in `build_local_lhs`/`build_local_rhs`: neighbors, then
     /// the unbiasedness row/column, then the drift rows/columns.
+    ///
+    /// **Too few neighbors for the drift** (`kt <= unbiased + drift terms`):
+    /// all drift rows/columns are left out, see [`drift_terms_used`].
     fn solve_subsystem(
         &self,
         ctx: &Context<'_>,
@@ -446,8 +485,9 @@ impl FullSystem {
     ) -> Option<CacheEntry> {
         let sel = selected(key, nbrs.len());
         let kt = sel.len();
-        let drift_no = ctx.drift_cond.nrows();
         let unb = ctx.unbiased as usize;
+        // !!! too few neighbors for the drift -> drop ALL drift terms !!!
+        let drift_no = drift_terms_used(kt, ctx.unbiased, ctx.drift_cond.nrows());
         let p = unb + drift_no;
 
         // right-hand side [r; f]
@@ -765,6 +805,76 @@ mod tests {
     }
 
     #[test]
+    fn too_few_neighbors_for_the_drift_drops_all_drift_terms() {
+        // small radius: many targets with only 1 or 2 stations
+        const SMALL: f64 = 1.5;
+        let data = make_data(40, 60, 30, 0.2, 5);
+        let no_drift = make_data(40, 60, 30, 0.2, 5).without_drift();
+        // p = unbiased + 1 drift term
+        for unbiased in [true, false] {
+            let p = unbiased as u32 + 1;
+            let res = data.run(unbiased, SMALL, 1, CacheMode::Hash, None);
+            let reference = no_drift.run(unbiased, SMALL, 1, CacheMode::Hash, None);
+            let mut dropped = 0;
+            for ((&n, (&f, &e)), (&f_ref, &e_ref)) in res
+                .n_used
+                .iter()
+                .zip(res.field.iter().zip(&res.error))
+                .zip(reference.field.iter().zip(&reference.error))
+            {
+                if n >= 1 && n <= p {
+                    // without drift: identical to ordinary / simple kriging
+                    assert_close(f, f_ref);
+                    assert_close(e, e_ref);
+                    dropped += 1;
+                }
+            }
+            assert!(dropped > 0, "test data has no small neighborhoods");
+            assert_eq!(res.stats.n_without_drift, dropped);
+            assert_eq!(reference.stats.n_without_drift, 0);
+        }
+    }
+
+    #[test]
+    fn single_field_function_drops_the_drift_too() {
+        const SMALL: f64 = 1.5;
+        let data = make_data(40, 60, 30, 0.2, 6);
+        let no_drift = make_data(40, 60, 30, 0.2, 6).without_drift();
+        let t = 0;
+        let res = data.run(true, SMALL, 1, CacheMode::Hash, None);
+        let targets: Vec<usize> = (0..60).filter(|&j| res.n_used[[j, t]] >= 1).collect();
+        let (field, error) = data.single(t, &targets, true, SMALL);
+        let (field_ref, error_ref) = no_drift.single(t, &targets, true, SMALL);
+        let mut dropped = 0;
+        for (a, &j) in targets.iter().enumerate() {
+            if res.n_used[[j, t]] <= 2 {
+                assert_close(field[a], field_ref[a]);
+                assert_close(error[a], error_ref[a]);
+                dropped += 1;
+            }
+        }
+        assert!(dropped > 0, "test data has no small neighborhoods");
+    }
+
+    #[test]
+    fn one_neighbor_with_drift_gives_its_value() {
+        // external drift kriging with a single station: the result is the
+        // station's value (ordinary kriging, weight 1), not an error
+        let data = Data {
+            cond_pos: Array2::from_shape_vec((2, 1), vec![1.0, 1.0]).unwrap(),
+            cond_val: Array2::from_shape_vec((1, 2), vec![3.5, -2.0]).unwrap(),
+            target_pos: Array2::from_shape_vec((2, 1), vec![1.5, 1.0]).unwrap(),
+            cond_err: Array1::from_elem(1, 0.0),
+            drift_cond: Array2::from_shape_vec((1, 1), vec![200.0]).unwrap(),
+            drift_target: Array2::from_shape_vec((1, 1), vec![450.0]).unwrap(),
+        };
+        let res = data.run(true, FULL_RADIUS, 1, CacheMode::Hash, None);
+        assert_close(res.field[[0, 0]], 3.5);
+        assert_close(res.field[[0, 1]], -2.0);
+        assert_eq!(res.stats.n_without_drift, 2);
+    }
+
+    #[test]
     fn cache_modes_give_identical_results() {
         let data = make_data(40, 25, 30, 0.2, 2);
         let none = data.run(true, RADIUS, 1, CacheMode::None, None);
@@ -774,6 +884,7 @@ mod tests {
             assert!(same(&res.field, &none.field));
             assert!(same(&res.error, &none.error));
             assert_eq!(res.n_used, none.n_used);
+            assert_eq!(res.stats.n_without_drift, none.stats.n_without_drift);
         }
         assert!(none.stats.n_solves >= last.stats.n_solves);
         assert!(last.stats.n_solves >= hash.stats.n_solves);

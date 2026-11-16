@@ -1,4 +1,33 @@
-//! Fast solver for local kriging systems.
+//! Fast solver for local kriging systems, and the rule for neighborhoods
+//! that are too small for the drift.
+//!
+//! # Too few neighbors for the drift: the drift is dropped
+//!
+//! ```text
+//! p = unbiased (0 or 1) + number of drift terms        (number of constraints)
+//! n = neighbors with data
+//!
+//! n >  p   ->  solved as requested (universal / external drift kriging)
+//! n <= p   ->  ALL drift terms are dropped: ordinary kriging
+//!              (simple kriging if `unbiased` is false)
+//! no drift ->  never changes anything
+//! ```
+//!
+//! With `n <= p` the constraints alone fix the weights and the covariance
+//! model has no influence. For example external drift kriging with two
+//! neighbors (`p = 2`) solves `w1 + w2 = 1`, `w1 h1 + w2 h2 = h0`, so
+//! `w1 = (h0 - h2) / (h1 - h2)`: a straight line through two points,
+//! singular for `h1 = h2` and extrapolating (negative weights) whenever
+//! `h0` lies outside `[h1, h2]`. With one neighbor there is no solution at
+//! all. Ordinary kriging is well-defined for any `n >= 1`.
+//!
+//! The rule lives in [`drift_terms_used`] and is applied by the local
+//! kriging functions
+//! ([`calc_field_krige_local`](crate::local_krige::calc_field_krige_local),
+//! [`calc_field_krige_local_multi`](crate::local_krige_multi::calc_field_krige_local_multi)).
+//! The returned kriging variance is the one of the system actually solved.
+//!
+//! # Solver
 //!
 //! A kriging system with `k` neighbors and `p` constraints (unbiasedness
 //! and drift terms) has the saddle-point form
@@ -36,6 +65,36 @@ use faer::{MatMut, MatRef, Par};
 use ndarray::{Array1, ArrayView1, ArrayView2};
 
 use crate::local_krige::{solve_dense, SingularSystem};
+
+// =========================================================================
+//   RULE: TOO FEW NEIGHBORS FOR THE DRIFT  ->  ALL DRIFT TERMS ARE DROPPED
+//
+//     n_neighbors <= unbiased + drift_no   ->   0 drift terms
+//                                                (ordinary / simple kriging)
+//     otherwise                            ->   drift_no drift terms
+//
+//   See the module docs for why. Used by every local kriging function.
+// =========================================================================
+
+/// Number of drift terms to use for a neighborhood of `n_neighbors`
+/// neighbors with data.
+///
+/// **All drift terms are dropped** (returns 0) if there are not more
+/// neighbors than constraints, i.e. `n_neighbors <= unbiased + drift_no`.
+/// The system is then ordinary kriging (or simple kriging if `unbiased` is
+/// false). Otherwise all `drift_no` terms are used. Without drift terms
+/// nothing changes.
+///
+/// The unbiasedness condition is never dropped. Constraints are always
+/// ordered unbiasedness first, then drift, so the reduced system is the
+/// full one without its last `drift_no` rows/columns.
+pub fn drift_terms_used(n_neighbors: usize, unbiased: bool, drift_no: usize) -> usize {
+    if n_neighbors <= unbiased as usize + drift_no {
+        0
+    } else {
+        drift_no
+    }
+}
 
 /// Relative pivot tolerance for the small Schur complement system.
 const SCHUR_EPS: f64 = 1e-12;
@@ -278,6 +337,23 @@ mod tests {
             .zip(b)
             .fold(0.0f64, |m, (x, y)| m.max((x - y).abs()))
             / scale
+    }
+
+    #[test]
+    fn drift_is_dropped_only_with_too_few_neighbors() {
+        // external drift kriging: unbiased + 1 drift term, p = 2
+        assert_eq!(drift_terms_used(1, true, 1), 0);
+        assert_eq!(drift_terms_used(2, true, 1), 0);
+        assert_eq!(drift_terms_used(3, true, 1), 1);
+        // universal kriging, linear drift in 2D: p = 3
+        assert_eq!(drift_terms_used(3, true, 2), 0);
+        assert_eq!(drift_terms_used(4, true, 2), 2);
+        // drift without unbiasedness: p = 1
+        assert_eq!(drift_terms_used(1, false, 1), 0);
+        assert_eq!(drift_terms_used(2, false, 1), 1);
+        // no drift: nothing to drop
+        assert_eq!(drift_terms_used(1, true, 0), 0);
+        assert_eq!(drift_terms_used(1, false, 0), 0);
     }
 
     #[test]

@@ -172,6 +172,10 @@ mod gstools_core {
     /// Local kriging of many fields (columns of `cond_val`, NaN = missing)
     /// with cached weights. Returns `(field, error, n_used, stats)`, the
     /// arrays with shape `(n_targets, n_fields)`.
+    ///
+    /// Fields with `n_used <= unbiased + drift terms` neighbors are kriged
+    /// without drift (all drift terms dropped), counted in
+    /// `stats["n_without_drift"]`.
     #[pyfunction(name = "calc_field_krige_local_multi")]
     #[pyo3(signature = (
         cond_pos, cond_val, target_pos, cov_model_json, cond_err, drift_cond,
@@ -224,6 +228,7 @@ mod gstools_core {
         stats.set_item("n_hits_last", res.stats.n_hits_last)?;
         stats.set_item("n_hits_hash", res.stats.n_hits_hash)?;
         stats.set_item("n_skipped", res.stats.n_skipped)?;
+        stats.set_item("n_without_drift", res.stats.n_without_drift)?;
         stats.set_item("max_masks_per_target", res.stats.max_masks_per_target)?;
         Ok((
             res.field.into_pyarray(py),

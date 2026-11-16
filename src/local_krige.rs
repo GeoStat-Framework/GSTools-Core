@@ -25,16 +25,27 @@
 //! (`faer`), falling back to [`solve_dense`] -- `nalgebra`'s
 //! partial-pivoted `LU`, then an `SVD`-based least-squares solve analogous
 //! to NumPy's `lstsq` in the Python prototype -- for singular systems.
+//!
+//! # Too few neighbors for the drift: the drift is dropped
+//!
+//! ```text
+//! n = neighbors,  p = unbiased + drift terms
+//!
+//! n <= p  ->  ALL DRIFT TERMS DROPPED: ordinary kriging
+//!             (simple kriging if not unbiased)
+//! ```
+//!
+//! See [`drift_terms_used`](crate::kriging_solve::drift_terms_used) for why.
 
 use std::fmt;
 
 use kdtree::{distance::squared_euclidean, KdTree};
 use nalgebra::{DMatrix, DVector};
-use ndarray::{Array1, Array2, ArrayView1, ArrayView2, Axis};
+use ndarray::{s, Array1, Array2, ArrayView1, ArrayView2, Axis};
 use rayon::prelude::*;
 
 use crate::covmodel::CovModel;
-use crate::kriging_solve::solve_kriging;
+use crate::kriging_solve::{drift_terms_used, solve_kriging};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum LocalKrigeError {
@@ -266,6 +277,11 @@ pub(crate) fn euclidean_dist(a: ArrayView1<'_, f64>, b: ArrayView1<'_, f64>) -> 
 /// * `num_threads` - reserved for a future `rayon` parallelization of the
 ///   per-target-point loop below; unused for now (see module docs)
 ///
+/// # Too few neighbors for the drift
+/// A target with `k <= unbiased + drift terms` neighbors is kriged **without
+/// any drift terms** (ordinary kriging, or simple kriging if `unbiased` is
+/// false), see [`drift_terms_used`]. Without drift terms nothing changes.
+///
 /// # Returns
 /// `(field, error)`, both shape `(m,)`; `field` is the raw local-kriging
 /// estimate, `error` is the raw `rhs . weights` (not yet post-processed
@@ -328,10 +344,17 @@ pub fn calc_field_krige_local(
             .collect();
         let k = nbr_indices.len();
 
+        // !!! too few neighbors for the drift -> drop ALL drift terms !!!
+        // (the drift rows are the last ones, so keeping the first
+        // `drift_no` rows of 0 or all of them is enough)
+        let drift_no = drift_terms_used(k, unbiased, drift_cond.nrows());
+
         // Select the neighbor data from the full conditioning arrays using the indices found by the k-d tree search
         let nbr_pos: Array2<f64> = cond_pos.select(Axis(1), &nbr_indices);
         let nbr_cond_err: Array1<f64> = cond_err.select(Axis(0), &nbr_indices);
-        let nbr_drift: Array2<f64> = drift_cond.select(Axis(1), &nbr_indices);
+        let nbr_drift: Array2<f64> = drift_cond
+            .slice(s![..drift_no, ..])
+            .select(Axis(1), &nbr_indices);
         let nbr_cond_val: Array1<f64> = cond_val.select(Axis(0), &nbr_indices);
 
         let lhs: Array2<f64> = build_local_lhs(
@@ -341,13 +364,18 @@ pub fn calc_field_krige_local(
             unbiased,
             nbr_drift.view(),
         );
-        let rhs: Array1<f64> =
-            build_local_rhs(&nbr_dists, model, exact, unbiased, drift_target.column(j));
+        let rhs: Array1<f64> = build_local_rhs(
+            &nbr_dists,
+            model,
+            exact,
+            unbiased,
+            drift_target.slice(s![..drift_no, j]),
+        );
 
         let weights: Array1<f64> = solve_kriging(lhs.view(), rhs.view(), k)
             .map_err(|_| LocalKrigeError::SingularSystem { target_index: j })?;
 
-        let pad = drift_target.nrows() + unbiased as usize;
+        let pad = drift_no + unbiased as usize;
         let mut local_cond: Array1<f64> = Array1::<f64>::zeros(k + pad);
         for i in 0..k {
             local_cond[i] = nbr_cond_val[i];
