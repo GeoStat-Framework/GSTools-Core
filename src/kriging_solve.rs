@@ -48,10 +48,13 @@
 //! w = z - Y mu
 //! ```
 //!
-//! The factorization uses `faer` single-threaded (callers parallelize over
+//! The Schur complement `S = F^T C^-1 F` is symmetric positive definite as
+//! well (if `F` has full column rank), so it is solved by Cholesky too.
+//! Both factorizations use `faer` single-threaded (callers parallelize over
 //! target points) and per-thread buffers, so a solve does not allocate.
-//! If `C` or the Schur complement is not positive definite (e.g. two
-//! neighbors at the same position) [`solve_kriging`] falls back to
+//! If `C` or `S` is not positive definite, or `S` is nearly singular (see
+//! [`SCHUR_EPS`]; e.g. two neighbors at the same position, or a drift with
+//! the same value at all neighbors) [`solve_kriging`] falls back to
 //! [`solve_dense`] (LU, then SVD least squares).
 
 use std::cell::RefCell;
@@ -96,7 +99,12 @@ pub fn drift_terms_used(n_neighbors: usize, unbiased: bool, drift_no: usize) -> 
     }
 }
 
-/// Relative pivot tolerance for the small Schur complement system.
+/// Relative pivot tolerance for the Schur complement `S`: its Cholesky
+/// factorization is rejected if a pivot `L_ii^2` is not larger than
+/// `SCHUR_EPS` times the largest diagonal entry of `S`. Cholesky alone only
+/// fails for pivots `<= 0`; this also catches a nearly rank-deficient `F`
+/// (e.g. drift values that are equal up to rounding), which would give huge
+/// Lagrange multipliers.
 const SCHUR_EPS: f64 = 1e-12;
 
 /// Reusable buffers for [`solve_cholesky_schur`].
@@ -106,6 +114,10 @@ pub(crate) struct SolveWorkspace {
     c: Vec<f64>,
     /// `(k, p + 1)` right-hand sides `[F | r]`, solved in place
     y: Vec<f64>,
+    /// `(p, p)` Schur complement, column-major, factorized in place
+    s: Vec<f64>,
+    /// `(p,)` right-hand side of the Schur system, solved in place (`mu`)
+    t: Vec<f64>,
     /// scratch memory for `faer`
     mem: Option<MemBuffer>,
     /// largest `(k, p)` the scratch memory was sized for
@@ -153,8 +165,9 @@ pub(crate) fn solve_cholesky_schur(
     let nrhs = p + 1;
 
     // scratch memory, grown when needed
-    if ws.mem.is_none() || k > ws.mem_size.0 || p > ws.mem_size.1 {
-        let size = (k.max(ws.mem_size.0), p.max(ws.mem_size.1));
+    // (sized for the (k, k) and the (p, p) factorization)
+    if ws.mem.is_none() || k.max(p) > ws.mem_size.0 || p > ws.mem_size.1 {
+        let size = (k.max(p).max(ws.mem_size.0), p.max(ws.mem_size.1));
         let req = cholesky_in_place_scratch::<f64>(size.0, Par::Seq, Default::default())
             .or(solve_in_place_scratch::<f64>(size.0, size.1 + 1, Par::Seq));
         ws.mem = Some(MemBuffer::new(req));
@@ -197,62 +210,51 @@ pub(crate) fn solve_cholesky_schur(
     let y = &ws.y;
     let z = &y[p * k..(p + 1) * k];
     if p > 0 {
-        // Schur complement S = F^T Y (p, p) and t = F^T z - f
-        let mut s = vec![0.0; p * p]; // row-major, p is tiny
-        let mut t = vec![0.0; p];
-        for a in 0..p {
-            for b in 0..p {
-                s[a * p + b] = (0..k).map(|i| con(i, a) * y[i + b * k]).sum();
+        // Schur complement S = F^T Y (p, p, lower triangle, column-major)
+        // and t = F^T z - f
+        ws.s.resize(p * p, 0.0);
+        ws.t.resize(p, 0.0);
+        let mut scale = 0.0f64; // largest diagonal entry of S
+        for b in 0..p {
+            for a in b..p {
+                ws.s[a + b * p] = (0..k).map(|i| con(i, a) * y[i + b * k]).sum();
             }
-            t[a] = (0..k).map(|i| con(i, a) * z[i]).sum::<f64>() - rhs[k + a];
+            scale = scale.max(ws.s[b + b * p]);
+            ws.t[b] = (0..k).map(|i| con(i, b) * z[i]).sum::<f64>() - rhs[k + b];
         }
-        let Some(mu) = solve_small(&mut s, &mut t, p) else {
+        if scale <= 0.0 || !scale.is_finite() {
             return false;
-        };
+        }
+        // S = L_S L_S^T, rejected if not positive definite or nearly
+        // singular (see SCHUR_EPS)
+        let mut smat = MatMut::from_column_major_slice_mut(ws.s.as_mut_slice(), p, p);
+        if cholesky_in_place(
+            smat.as_mut(),
+            LltRegularization::default(),
+            Par::Seq,
+            stack,
+            Default::default(),
+        )
+        .is_err()
+        {
+            return false;
+        }
+        let ls = MatRef::from_column_major_slice(ws.s.as_slice(), p, p);
+        if (0..p).any(|i| ls[(i, i)] * ls[(i, i)] <= SCHUR_EPS * scale) {
+            return false;
+        }
+        // mu = S^-1 t
+        let tmat = MatMut::from_column_major_slice_mut(ws.t.as_mut_slice(), p, 1);
+        solve_in_place(ls, tmat, Par::Seq, stack);
+        let mu = &ws.t;
         for i in 0..k {
             x[i] = z[i] - (0..p).map(|q| y[i + q * k] * mu[q]).sum::<f64>();
         }
-        x[k..].copy_from_slice(&mu);
+        x[k..].copy_from_slice(mu);
     } else {
         x.copy_from_slice(z);
     }
     x.iter().all(|v| v.is_finite())
-}
-
-/// Gaussian elimination with partial pivoting for the tiny `(p, p)` Schur
-/// system (row-major `s`). `None` if a pivot is (relatively) zero.
-fn solve_small(s: &mut [f64], t: &mut [f64], p: usize) -> Option<Vec<f64>> {
-    let scale = s.iter().fold(0.0f64, |m, v| m.max(v.abs()));
-    if scale == 0.0 || !scale.is_finite() {
-        return None;
-    }
-    for col in 0..p {
-        let piv = (col..p)
-            .max_by(|&a, &b| s[a * p + col].abs().total_cmp(&s[b * p + col].abs()))
-            .expect("non-empty range");
-        if s[piv * p + col].abs() <= SCHUR_EPS * scale {
-            return None;
-        }
-        if piv != col {
-            for c in 0..p {
-                s.swap(piv * p + c, col * p + c);
-            }
-            t.swap(piv, col);
-        }
-        for row in col + 1..p {
-            let f = s[row * p + col] / s[col * p + col];
-            for c in col..p {
-                s[row * p + c] -= f * s[col * p + c];
-            }
-            t[row] -= f * t[col];
-        }
-    }
-    let mut mu = vec![0.0; p];
-    for row in (0..p).rev() {
-        let acc: f64 = (row + 1..p).map(|c| s[row * p + c] * mu[c]).sum();
-        mu[row] = (t[row] - acc) / s[row * p + row];
-    }
-    Some(mu)
 }
 
 /// Solve a local kriging system in the layout of
@@ -417,6 +419,42 @@ mod tests {
         assert!(residual < 1e-8, "residual {residual}");
         // and the two duplicates share the weight like the fallback does
         assert!((x[0] + x[1] - reference[0] - reference[1]).abs() < 1e-8);
+    }
+
+    /// `solve_cholesky_schur` on a system in `build_local_lhs` layout
+    fn cholesky_schur(lhs: &Array2<f64>, rhs: &Array1<f64>, k: usize) -> bool {
+        let mut x = Vec::new();
+        with_workspace(|ws| {
+            solve_cholesky_schur(
+                ws,
+                k,
+                lhs.nrows() - k,
+                |a, b| lhs[[a, b]],
+                |i, q| lhs[[i, k + q]],
+                rhs.as_slice().unwrap(),
+                &mut x,
+            )
+        })
+    }
+
+    #[test]
+    fn rank_deficient_constraints_fall_back() {
+        // drift column = 5 * unbiasedness column (+ tiny noise): F has
+        // (nearly) rank 1, S is (nearly) singular. Cholesky itself fails for
+        // 0 and 1e-13; for 1e-7 it succeeds with a tiny positive pivot that
+        // only the SCHUR_EPS check rejects.
+        for noise in [0.0, 1e-13, 1e-7] {
+            let (mut lhs, rhs) = system(12, 2, 21);
+            let mut r = Lcg(5);
+            for a in 0..12 {
+                let v = 5.0 + noise * r.next();
+                lhs[[a, 13]] = v;
+                lhs[[13, a]] = v;
+            }
+            assert!(!cholesky_schur(&lhs, &rhs, 12), "noise={noise}");
+            // the fallback still gives a solution
+            assert!(solve_kriging(lhs.view(), rhs.view(), 12).is_ok());
+        }
     }
 
     #[test]

@@ -22,9 +22,9 @@
 //! system) -- there is no pre-inverted matrix to just contract against.
 //! The systems are solved by [`solve_kriging`](crate::kriging_solve::solve_kriging):
 //! Cholesky of the covariance block plus a small Schur complement system
-//! (`faer`), falling back to [`solve_dense`] -- `nalgebra`'s
-//! partial-pivoted `LU`, then an `SVD`-based least-squares solve analogous
-//! to NumPy's `lstsq` in the Python prototype -- for singular systems.
+//! (`faer`), falling back to [`solve_dense`] -- partial-pivoted `LU`, then
+//! an `SVD`-based least-squares solve analogous to NumPy's `lstsq` in the
+//! Python prototype (also `faer`) -- for singular systems.
 //!
 //! # Too few neighbors for the drift: the drift is dropped
 //!
@@ -39,8 +39,9 @@
 
 use std::fmt;
 
+use faer::linalg::solvers::{PartialPivLu, Solve, Svd};
+use faer::Mat;
 use kdtree::{distance::squared_euclidean, KdTree};
-use nalgebra::{DMatrix, DVector};
 use ndarray::{s, Array1, Array2, ArrayView1, ArrayView2, Axis};
 use rayon::prelude::*;
 
@@ -195,25 +196,20 @@ const LSTSQ_EPS: f64 = 1e-12;
 ///
 /// Kriging systems are normally solved by the faster
 /// [`solve_kriging`](crate::kriging_solve::solve_kriging) (Cholesky + Schur
-/// complement); this general solver is its fallback when the covariance
-/// block is not positive definite.
+/// complement); this general solver is its fallback when that fails (e.g.
+/// two neighbors at the same position).
 ///
-/// Tries `nalgebra::linalg::LU` (partial-pivoted Gaussian elimination)
-/// first -- cheap, and sufficient for the well-conditioned case (nugget >
-/// 0 keeps the diagonal away from zero). `LU::solve` only treats an
-/// *exactly* zero pivot as singular (no tolerance), so it can, in
-/// principle, still miss a numerically near-singular system; that
-/// tradeoff is accepted here in favor of the fallback below actually
-/// covering the case NumPy's `lstsq` was covering in the Python
-/// prototype: if `LU` reports singular, this falls back to
-/// `nalgebra::linalg::SVD::solve`, i.e. a least-squares solve via the
-/// Moore-Penrose pseudo-inverse (singular values below [`LSTSQ_EPS`] are
-/// treated as zero). That fallback finds *a* solution for consistent
-/// rank-deficient systems (e.g. two neighbors at the same position) and
-/// the residual-minimizing solution for inconsistent ones, rather than
-/// erroring out -- so `Err(SingularSystem)` is now reserved for cases
-/// where even that fails (in practice: essentially never, since both `u`
-/// and `v` are requested from the SVD).
+/// 1. `faer`'s partial-pivoted `LU`. Accepted unless a pivot is *exactly*
+///    zero or the result is not finite (no tolerance, so a numerically
+///    near-singular system can still pass).
+/// 2. Otherwise a least-squares solve via the SVD pseudo-inverse
+///    (`x = V S^+ U^T b`, singular values not above [`LSTSQ_EPS`] are
+///    treated as zero), as NumPy's `lstsq` in the Python prototype. It
+///    finds *a* solution for consistent rank-deficient systems and the
+///    residual-minimizing one for inconsistent ones.
+///
+/// `Err(SingularSystem)` only if the SVD itself fails (does not converge),
+/// in practice essentially never.
 pub fn solve_dense(
     a: ArrayView2<'_, f64>,
     b: ArrayView1<'_, f64>,
@@ -222,20 +218,37 @@ pub fn solve_dense(
     assert_eq!(a.nrows(), n, "matrix/vector size mismatch");
     assert_eq!(a.ncols(), n, "matrix must be square");
 
-    // Convert `ndarray` views to `nalgebra` types, required by
-    // `nalgebra::linalg::LU`/`SVD`.
-    let a_na = DMatrix::from_fn(n, n, |r, c| a[[r, c]]);
-    let b_na = DVector::from_fn(n, |r, _| b[r]);
+    let a_f = Mat::<f64>::from_fn(n, n, |r, c| a[[r, c]]);
 
-    // try cheap LU first, then fall back to SVD least-squares if it reports singular
-    if let Some(x) = a_na.clone().lu().solve(&b_na) {
-        return Ok(Array1::from_iter(x.iter().copied()));
+    // 1. LU with partial pivoting
+    let lu = PartialPivLu::new(a_f.as_ref());
+    let u = lu.U();
+    if (0..n).all(|i| u[(i, i)] != 0.0) {
+        let mut x = Mat::<f64>::from_fn(n, 1, |r, _| b[r]);
+        lu.solve_in_place(x.as_mut());
+        if x.col(0).iter().all(|v| v.is_finite()) {
+            return Ok(Array1::from_iter(x.col(0).iter().copied()));
+        }
     }
 
-    a_na.svd(true, true)
-        .solve(&b_na, LSTSQ_EPS)
-        .map(|x| Array1::from_iter(x.iter().copied()))
-        .map_err(|_| SingularSystem)
+    // 2. least squares via the SVD pseudo-inverse
+    let svd = Svd::new(a_f.as_ref()).map_err(|_| SingularSystem)?;
+    let (u, sv, v) = (svd.U(), svd.S(), svd.V());
+    // c = S^+ U^T b
+    let c: Vec<f64> = (0..n)
+        .map(|i| {
+            let sigma = sv[i];
+            if sigma > LSTSQ_EPS {
+                (0..n).map(|r| u[(r, i)] * b[r]).sum::<f64>() / sigma
+            } else {
+                0.0
+            }
+        })
+        .collect();
+    // x = V c
+    Ok(Array1::from_iter(
+        (0..n).map(|r| (0..n).map(|i| v[(r, i)] * c[i]).sum::<f64>()),
+    ))
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
