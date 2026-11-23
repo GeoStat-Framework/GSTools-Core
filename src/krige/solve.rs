@@ -1,35 +1,7 @@
-//! Fast solver for local kriging systems, and the rule for neighborhoods
-//! that are too small for the drift.
+//! Linear algebra for the local kriging systems. Knows nothing about
+//! kriging itself (layout and drift rule: [`crate::krige::local`]).
 //!
-//! # Too few neighbors for the drift: the drift is dropped
-//!
-//! ```text
-//! p = unbiased (0 or 1) + number of drift terms        (number of constraints)
-//! n = neighbors with data
-//!
-//! n >  p   ->  solved as requested (universal / external drift kriging)
-//! n <= p   ->  ALL drift terms are dropped: ordinary kriging
-//!              (simple kriging if `unbiased` is false)
-//! no drift ->  never changes anything
-//! ```
-//!
-//! With `n <= p` the constraints alone fix the weights and the covariance
-//! model has no influence. For example external drift kriging with two
-//! neighbors (`p = 2`) solves `w1 + w2 = 1`, `w1 h1 + w2 h2 = h0`, so
-//! `w1 = (h0 - h2) / (h1 - h2)`: a straight line through two points,
-//! singular for `h1 = h2` and extrapolating (negative weights) whenever
-//! `h0` lies outside `[h1, h2]`. With one neighbor there is no solution at
-//! all. Ordinary kriging is well-defined for any `n >= 1`.
-//!
-//! The rule lives in [`drift_terms_used`] and is applied by the local
-//! kriging functions
-//! ([`calc_field_krige_local`](crate::local_krige::calc_field_krige_local),
-//! [`calc_field_krige_local_multi`](crate::local_krige_multi::calc_field_krige_local_multi)).
-//! The returned kriging variance is the one of the system actually solved.
-//!
-//! # Solver
-//!
-//! A kriging system with `k` neighbors and `p` constraints (unbiasedness
+//! //! A kriging system with `k` neighbors and `p` constraints (unbiasedness
 //! and drift terms) has the saddle-point form
 //!
 //! ```text
@@ -53,9 +25,17 @@
 //! Both factorizations use `faer` single-threaded (callers parallelize over
 //! target points) and per-thread buffers, so a solve does not allocate.
 //! If `C` or `S` is not positive definite, or `S` is nearly singular (see
-//! [`SCHUR_EPS`]; e.g. two neighbors at the same position, or a drift with
-//! the same value at all neighbors) [`solve_kriging`] falls back to
+//! `SCHUR_EPS`; e.g. two neighbors at the same position, or a drift with
+//! the same value at all neighbors) [`solve_saddle_point`] falls back to
 //! [`solve_dense`] (LU, then SVD least squares).
+//!
+//! Entry points:
+//! * [`solve_saddle_point`] - the system given by entry functions (used by
+//!   local kriging)
+//! * [`solve_kriging`] - the same for an assembled matrix; not used by the
+//!   production code anymore, kept as a reference for the tests (with
+//!   `build_lhs` / `build_rhs` in `krige/test_util.rs`)
+//! * [`solve_dense`] - general dense solver, the fallback
 
 use std::cell::RefCell;
 
@@ -64,40 +44,9 @@ use faer::linalg::cholesky::llt::factor::{
     cholesky_in_place, cholesky_in_place_scratch, LltRegularization,
 };
 use faer::linalg::cholesky::llt::solve::{solve_in_place, solve_in_place_scratch};
-use faer::{MatMut, MatRef, Par};
-use ndarray::{Array1, ArrayView1, ArrayView2};
-
-use crate::local_krige::{solve_dense, SingularSystem};
-
-// =========================================================================
-//   RULE: TOO FEW NEIGHBORS FOR THE DRIFT  ->  ALL DRIFT TERMS ARE DROPPED
-//
-//     n_neighbors <= unbiased + drift_no   ->   0 drift terms
-//                                                (ordinary / simple kriging)
-//     otherwise                            ->   drift_no drift terms
-//
-//   See the module docs for why. Used by every local kriging function.
-// =========================================================================
-
-/// Number of drift terms to use for a neighborhood of `n_neighbors`
-/// neighbors with data.
-///
-/// **All drift terms are dropped** (returns 0) if there are not more
-/// neighbors than constraints, i.e. `n_neighbors <= unbiased + drift_no`.
-/// The system is then ordinary kriging (or simple kriging if `unbiased` is
-/// false). Otherwise all `drift_no` terms are used. Without drift terms
-/// nothing changes.
-///
-/// The unbiasedness condition is never dropped. Constraints are always
-/// ordered unbiasedness first, then drift, so the reduced system is the
-/// full one without its last `drift_no` rows/columns.
-pub fn drift_terms_used(n_neighbors: usize, unbiased: bool, drift_no: usize) -> usize {
-    if n_neighbors <= unbiased as usize + drift_no {
-        0
-    } else {
-        drift_no
-    }
-}
+use faer::linalg::solvers::{PartialPivLu, Solve, Svd};
+use faer::{Mat, MatMut, MatRef, Par};
+use ndarray::{Array1, Array2, ArrayView1, ArrayView2};
 
 /// Relative pivot tolerance for the Schur complement `S`: its Cholesky
 /// factorization is rejected if a pivot `L_ii^2` is not larger than
@@ -109,7 +58,7 @@ const SCHUR_EPS: f64 = 1e-12;
 
 /// Reusable buffers for [`solve_cholesky_schur`].
 #[derive(Default)]
-pub(crate) struct SolveWorkspace {
+struct SolveWorkspace {
     /// `(k, k)` covariance block, column-major, factorized in place
     c: Vec<f64>,
     /// `(k, p + 1)` right-hand sides `[F | r]`, solved in place
@@ -130,7 +79,7 @@ thread_local! {
 }
 
 /// Run `f` with this thread's workspace.
-pub(crate) fn with_workspace<R>(f: impl FnOnce(&mut SolveWorkspace) -> R) -> R {
+fn with_workspace<R>(f: impl FnOnce(&mut SolveWorkspace) -> R) -> R {
     WORKSPACE.with(|ws| f(&mut ws.borrow_mut()))
 }
 
@@ -145,9 +94,9 @@ pub(crate) fn with_workspace<R>(f: impl FnOnce(&mut SolveWorkspace) -> R) -> R {
 ///
 /// # Returns
 /// `false` if `C` or the Schur complement is not (numerically) positive
-/// definite or the result is not finite; `x` is then unspecified and the
-/// caller should fall back to [`solve_dense`].
-pub(crate) fn solve_cholesky_schur(
+/// definite or the result is not finite; `x` is then unspecified.
+/// [`solve_saddle_point`] then falls back to [`solve_dense`].
+fn solve_cholesky_schur(
     ws: &mut SolveWorkspace,
     k: usize,
     p: usize,
@@ -257,13 +206,52 @@ pub(crate) fn solve_cholesky_schur(
     x.iter().all(|v| v.is_finite())
 }
 
-/// Solve a local kriging system in the layout of
-/// [`build_local_lhs`](crate::local_krige::build_local_lhs) /
-/// [`build_local_rhs`](crate::local_krige::build_local_rhs): the first `k`
-/// rows/columns are the neighbors, the rest the constraints.
+/// Solve the saddle-point system (see module docs): Cholesky + Schur
+/// complement, and if that fails [`solve_dense`] on the same entries.
 ///
-/// Uses [`solve_cholesky_schur`] and falls back to [`solve_dense`] (LU,
-/// then SVD least squares) if that fails.
+/// # Arguments
+/// * `k`, `p` - number of neighbors and constraints
+/// * `cov(a, b)` - entry of `C`; must be symmetric and defined for all
+///   `a, b < k` (the fast path only reads `a >= b`, the fallback all)
+/// * `con(i, q)` - entry of `F`
+/// * `rhs` - `[r; f]`, length `k + p`
+/// * `x` - output `[w; mu]`, resized to `k + p`
+pub fn solve_saddle_point(
+    k: usize,
+    p: usize,
+    cov: impl Fn(usize, usize) -> f64,
+    con: impl Fn(usize, usize) -> f64,
+    rhs: &[f64],
+    x: &mut Vec<f64>,
+) -> Result<(), SingularSystem> {
+    if with_workspace(|ws| solve_cholesky_schur(ws, k, p, &cov, &con, rhs, x)) {
+        return Ok(());
+    }
+    // fallback: full (k + p, k + p) matrix, LU then SVD least squares
+    let n = k + p;
+    let mut lhs = Array2::<f64>::zeros((n, n));
+    for a in 0..k {
+        for b in 0..k {
+            lhs[[a, b]] = cov(a, b);
+        }
+        for q in 0..p {
+            lhs[[a, k + q]] = con(a, q);
+            lhs[[k + q, a]] = con(a, q);
+        }
+    }
+    let sol = solve_dense(lhs.view(), ArrayView1::from(rhs))?;
+    x.clear();
+    x.extend(sol.iter().copied());
+    Ok(())
+}
+
+/// **Not used by the production code anymore**, kept as a reference for the
+/// tests (together with `build_lhs` / `build_rhs` in `krige/test_util.rs`).
+///
+/// Solve an assembled local kriging system in the layout of
+/// the local kriging system (see [`crate::krige::local`]): the first `k`
+/// rows/columns are the neighbors, the rest the constraints. `lhs` must be
+/// symmetric. See [`solve_saddle_point`].
 pub fn solve_kriging(
     lhs: ArrayView2<'_, f64>,
     rhs: ArrayView1<'_, f64>,
@@ -272,40 +260,93 @@ pub fn solve_kriging(
     let n = rhs.len();
     assert!(k <= n, "more neighbors than unknowns");
     let mut x = Vec::with_capacity(n);
-    let rhs_vec = rhs.to_vec();
-    let ok = with_workspace(|ws| {
-        solve_cholesky_schur(
-            ws,
-            k,
-            n - k,
-            |a, b| lhs[[a, b]],
-            |i, q| lhs[[i, k + q]],
-            &rhs_vec,
-            &mut x,
-        )
-    });
-    if ok {
-        Ok(Array1::from_vec(x))
-    } else {
-        solve_dense(lhs, rhs)
-    }
+    solve_saddle_point(
+        k,
+        n - k,
+        |a, b| lhs[[a, b]],
+        |i, q| lhs[[i, k + q]],
+        &rhs.to_vec(),
+        &mut x,
+    )?;
+    Ok(Array1::from_vec(x))
 }
+
+/// Tolerance below which an SVD singular value is treated as zero in the
+/// least-squares fallback -- analogous to NumPy `lstsq`'s default `rcond`
+/// cutoff.
+const LSTSQ_EPS: f64 = 1e-12;
+
+/// Solve the dense linear system `a @ x = b`. Pure function (takes views,
+/// returns a fresh `Array1`), so it is independently testable with plain
+/// literal matrices, unrelated to kriging.
+///
+/// Kriging systems are normally solved by the faster
+/// [`solve_saddle_point`] (Cholesky + Schur complement); this general
+/// solver is its fallback when that fails (e.g. two neighbors at the same
+/// position).
+///
+/// 1. `faer`'s partial-pivoted `LU`. Accepted unless a pivot is *exactly*
+///    zero or the result is not finite (no tolerance, so a numerically
+///    near-singular system can still pass).
+/// 2. Otherwise a least-squares solve via the SVD pseudo-inverse
+///    (`x = V S^+ U^T b`, singular values not above `LSTSQ_EPS` (1e-12) are
+///    treated as zero), as NumPy's `lstsq` in the Python prototype. It
+///    finds *a* solution for consistent rank-deficient systems and the
+///    residual-minimizing one for inconsistent ones.
+///
+/// `Err(SingularSystem)` only if the SVD itself fails (does not converge),
+/// in practice essentially never.
+pub fn solve_dense(
+    a: ArrayView2<'_, f64>,
+    b: ArrayView1<'_, f64>,
+) -> Result<Array1<f64>, SingularSystem> {
+    let n = b.len();
+    assert_eq!(a.nrows(), n, "matrix/vector size mismatch");
+    assert_eq!(a.ncols(), n, "matrix must be square");
+
+    let a_f = Mat::<f64>::from_fn(n, n, |r, c| a[[r, c]]);
+
+    // 1. LU with partial pivoting
+    let lu = PartialPivLu::new(a_f.as_ref());
+    let u = lu.U();
+    if (0..n).all(|i| u[(i, i)] != 0.0) {
+        let mut x = Mat::<f64>::from_fn(n, 1, |r, _| b[r]);
+        lu.solve_in_place(x.as_mut());
+        if x.col(0).iter().all(|v| v.is_finite()) {
+            return Ok(Array1::from_iter(x.col(0).iter().copied()));
+        }
+    }
+
+    // 2. least squares via the SVD pseudo-inverse
+    let svd = Svd::new(a_f.as_ref()).map_err(|_| SingularSystem)?;
+    let (u, sv, v) = (svd.U(), svd.S(), svd.V());
+    // c = S^+ U^T b
+    let c: Vec<f64> = (0..n)
+        .map(|i| {
+            let sigma = sv[i];
+            if sigma > LSTSQ_EPS {
+                (0..n).map(|r| u[(r, i)] * b[r]).sum::<f64>() / sigma
+            } else {
+                0.0
+            }
+        })
+        .collect();
+    // x = V c
+    Ok(Array1::from_iter(
+        (0..n).map(|r| (0..n).map(|i| v[(r, i)] * c[i]).sum::<f64>()),
+    ))
+}
+
+/// A linear system could not be solved, not even by the least-squares
+/// fallback of [`solve_dense`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct SingularSystem;
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ndarray::Array2;
-
-    struct Lcg(u64);
-    impl Lcg {
-        fn next(&mut self) -> f64 {
-            self.0 = self
-                .0
-                .wrapping_mul(6364136223846793005)
-                .wrapping_add(1442695040888963407);
-            (self.0 >> 11) as f64 / (1u64 << 53) as f64
-        }
-    }
+    use crate::krige::test_util::Lcg;
+    use ndarray::array;
 
     /// exponential-covariance kriging system with `p` constraints
     /// (unbiasedness + `p - 1` drift terms)
@@ -339,23 +380,6 @@ mod tests {
             .zip(b)
             .fold(0.0f64, |m, (x, y)| m.max((x - y).abs()))
             / scale
-    }
-
-    #[test]
-    fn drift_is_dropped_only_with_too_few_neighbors() {
-        // external drift kriging: unbiased + 1 drift term, p = 2
-        assert_eq!(drift_terms_used(1, true, 1), 0);
-        assert_eq!(drift_terms_used(2, true, 1), 0);
-        assert_eq!(drift_terms_used(3, true, 1), 1);
-        // universal kriging, linear drift in 2D: p = 3
-        assert_eq!(drift_terms_used(3, true, 2), 0);
-        assert_eq!(drift_terms_used(4, true, 2), 2);
-        // drift without unbiasedness: p = 1
-        assert_eq!(drift_terms_used(1, false, 1), 0);
-        assert_eq!(drift_terms_used(2, false, 1), 1);
-        // no drift: nothing to drop
-        assert_eq!(drift_terms_used(1, true, 0), 0);
-        assert_eq!(drift_terms_used(1, false, 0), 0);
     }
 
     #[test]
@@ -421,7 +445,7 @@ mod tests {
         assert!((x[0] + x[1] - reference[0] - reference[1]).abs() < 1e-8);
     }
 
-    /// `solve_cholesky_schur` on a system in `build_local_lhs` layout
+    /// `solve_cholesky_schur` on a system in `build_lhs` layout
     fn cholesky_schur(lhs: &Array2<f64>, rhs: &Array1<f64>, k: usize) -> bool {
         let mut x = Vec::new();
         with_workspace(|ws| {
@@ -465,5 +489,76 @@ mod tests {
             solve_cholesky_schur(ws, 2, 0, |a, b| c[a][b], |_, _| 0.0, &[1.0, 1.0], &mut x)
         });
         assert!(!ok);
+    }
+
+    // --- solve_dense -----------------------------------------------------
+
+    #[test]
+    fn solve_dense_matches_hand_solved_system() {
+        // [2 1; 1 3] x = [3; 5]  ->  x = [4/5, 7/5]
+        let a = array![[2.0, 1.0], [1.0, 3.0]];
+        let b = array![3.0, 5.0];
+        let x = solve_dense(a.view(), b.view()).unwrap();
+        assert!((x[0] - 0.8).abs() < 1e-10);
+        assert!((x[1] - 1.4).abs() < 1e-10);
+    }
+
+    #[test]
+    fn solve_dense_needs_pivoting() {
+        // zero in the natural pivot position -> must swap rows to solve
+        let a = array![[0.0, 1.0], [1.0, 1.0]];
+        let b = array![2.0, 3.0];
+        let x = solve_dense(a.view(), b.view()).unwrap();
+        assert!((x[0] - 1.0).abs() < 1e-10);
+        assert!((x[1] - 2.0).abs() < 1e-10);
+    }
+
+    #[test]
+    fn solve_dense_lstsq_fallback_finds_min_norm_solution_for_consistent_singular_system() {
+        // row2 = 2 * row1, and b is consistent with that (b2 = 2*b1): the
+        // system x1 + 2*x2 = 1 has infinitely many exact solutions.  LU's
+        // pivot search hits an exact zero (row2 becomes all-zero after
+        // eliminating row1) and reports singular; the SVD fallback must
+        // not error out here -- it picks the minimum-norm one among all
+        // exact solutions, which (for a single constraint a.x = c) is
+        // x = c * a / |a|^2 = (1, 2) / 5.
+        let a = array![[1.0, 2.0], [2.0, 4.0]];
+        let b = array![1.0, 2.0];
+
+        let x = solve_dense(a.view(), b.view()).expect("lstsq fallback should not error out");
+
+        assert!((x[0] - 0.2).abs() < 1e-8);
+        assert!((x[1] - 0.4).abs() < 1e-8);
+        // it is a genuine solution of the (consistent) original system:
+        assert!((a.row(0).dot(&x) - b[0]).abs() < 1e-8);
+        assert!((a.row(1).dot(&x) - b[1]).abs() < 1e-8);
+    }
+
+    #[test]
+    fn solve_dense_lstsq_fallback_minimizes_residual_for_inconsistent_singular_system() {
+        // Same singular `a`, but now b is *inconsistent* with row2 = 2 *
+        // row1 (b2 != 2*b1): no exact solution exists. This is the case
+        // NumPy's `lstsq` (and our SVD fallback) is actually for --
+        // minimizing |a.x - b|^2. Since a = (1,2)(1,2)^T, a.x only depends
+        // on s = x1 + 2*x2, and minimizing |(s,2s) - (1,3)|^2 over s gives
+        // s = 1.4 (hand-derived below), with the minimum-norm x for that s
+        // being s * (1, 2) / 5 = (0.28, 0.56).
+        let a = array![[1.0, 2.0], [2.0, 4.0]];
+        let b = array![1.0, 3.0];
+
+        let x = solve_dense(a.view(), b.view()).expect("lstsq fallback should not error out");
+
+        assert!((x[0] - 0.28).abs() < 1e-8);
+        assert!((x[1] - 0.56).abs() < 1e-8);
+
+        // sanity: this residual must be strictly smaller than for a
+        // (non-least-squares) candidate exact solution of just row 1.
+        let exact_row0_only = array![1.0, 0.0]; // satisfies row 0 exactly, ignores row 1
+        let residual = |v: &Array1<f64>| {
+            let r0 = a.row(0).dot(v) - b[0];
+            let r1 = a.row(1).dot(v) - b[1];
+            r0 * r0 + r1 * r1
+        };
+        assert!(residual(&x) < residual(&exact_row0_only));
     }
 }

@@ -15,9 +15,6 @@
 use pyo3::prelude::pymodule;
 
 pub mod covmodel;
-pub mod kriging_solve;
-pub mod local_krige;
-pub mod local_krige_multi;
 pub mod covmodel_spec;
 pub mod field;
 pub mod krige;
@@ -27,8 +24,7 @@ pub mod variogram;
 #[pymodule]
 mod gstools_core {
     use crate::covmodel::CovModel;
-    use crate::local_krige::calc_field_krige_local;
-    use crate::local_krige_multi::{calc_field_krige_local_multi, CacheMode};
+    use crate::krige::calc_field_krige_local;
     use crate::field::{summator, summator_fourier, summator_incompr};
     use crate::krige::{calculator_field_krige, calculator_field_krige_and_variance};
     use crate::variogram::{
@@ -128,62 +124,24 @@ mod gstools_core {
         calculator_field_krige(krige_mat, krig_vecs, cond, num_threads).into_pyarray(py)
     }
 
-    #[pyfunction(name = "calc_field_krige_local")]
-    #[allow(clippy::too_many_arguments)]
-    fn calc_field_krige_local_py<'py>(
-        py: Python<'py>,
-        cond_pos: PyReadonlyArray2<f64>,
-        cond_val: PyReadonlyArray1<f64>,
-        target_pos: PyReadonlyArray2<f64>,
-        cov_model_json: &str,
-        cond_err: PyReadonlyArray1<f64>,
-        drift_cond: PyReadonlyArray2<f64>,
-        drift_target: PyReadonlyArray2<f64>,
-        unbiased: bool,
-        exact: bool,
-        local_radius: f64,
-        num_threads: Option<usize>,
-    ) -> PyResult<(Bound<'py, PyArray1<f64>>, Bound<'py, PyArray1<f64>>)> {
-        let model = CovModel::from_json(cov_model_json)
-            .map_err(|e| PyValueError::new_err(e.to_string()))?;
-        let cond_pos = cond_pos.as_array();
-        let cond_val = cond_val.as_array();
-        let target_pos = target_pos.as_array();
-        let cond_err = cond_err.as_array();
-        let drift_cond = drift_cond.as_array();
-        let drift_target = drift_target.as_array();
-        let (field, error) = calc_field_krige_local(
-            cond_pos,
-            cond_val,
-            target_pos,
-            &model,
-            cond_err,
-            drift_cond,
-            drift_target,
-            unbiased,
-            exact,
-            local_radius,
-            num_threads,
-        )
-        .map_err(|e| PyValueError::new_err(e.to_string()))?;
-        Ok((field.into_pyarray(py), error.into_pyarray(py)))
-    }
-
-    /// Local kriging of many fields (columns of `cond_val`, NaN = missing)
-    /// with cached weights. Returns `(field, error, n_used, stats)`, the
-    /// arrays with shape `(n_targets, n_fields)`.
+    /// Local kriging of one or many fields: `cond_val` has the shape
+    /// `(n_cond, n_fields)` (one column per field, NaN = missing in that
+    /// field; a single field is one column). Weights are cached per target
+    /// and neighbor mask. Returns `(field, error, n_used, stats)`, the arrays
+    /// with shape `(n_targets, n_fields)`.
     ///
-    /// Fields with `n_used <= unbiased + drift terms` neighbors are kriged
-    /// without drift (all drift terms dropped), counted in
-    /// `stats["n_without_drift"]`.
-    #[pyfunction(name = "calc_field_krige_local_multi")]
+    /// A target without neighbors (or fewer than `min_neighbors`) is NaN
+    /// with its count in `n_used`. Fields with `n_used <= unbiased + drift
+    /// terms` neighbors are kriged without drift (all drift terms dropped),
+    /// counted in `stats["n_without_drift"]`.
+    #[pyfunction(name = "calc_field_krige_local")]
     #[pyo3(signature = (
         cond_pos, cond_val, target_pos, cov_model_json, cond_err, drift_cond,
         drift_target, unbiased, exact, local_radius, min_neighbors=1,
-        cache="hash", num_threads=None
+        num_threads=None
     ))]
     #[allow(clippy::too_many_arguments, clippy::type_complexity)]
-    fn calc_field_krige_local_multi_py<'py>(
+    fn calc_field_krige_local_py<'py>(
         py: Python<'py>,
         cond_pos: PyReadonlyArray2<f64>,
         cond_val: PyReadonlyArray2<f64>,
@@ -196,7 +154,6 @@ mod gstools_core {
         exact: bool,
         local_radius: f64,
         min_neighbors: usize,
-        cache: &str,
         num_threads: Option<usize>,
     ) -> PyResult<(
         Bound<'py, PyArray2<f64>>,
@@ -206,8 +163,7 @@ mod gstools_core {
     )> {
         let model = CovModel::from_json(cov_model_json)
             .map_err(|e| PyValueError::new_err(e.to_string()))?;
-        let cache: CacheMode = cache.parse().map_err(PyValueError::new_err)?;
-        let res = calc_field_krige_local_multi(
+        let res = calc_field_krige_local(
             cond_pos.as_array(),
             cond_val.as_array(),
             target_pos.as_array(),
@@ -219,7 +175,6 @@ mod gstools_core {
             exact,
             local_radius,
             min_neighbors,
-            cache,
             num_threads,
         )
         .map_err(|e| PyValueError::new_err(e.to_string()))?;
