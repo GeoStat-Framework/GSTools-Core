@@ -14,6 +14,8 @@
 
 use pyo3::prelude::pymodule;
 
+pub mod covmodel;
+pub mod covmodel_spec;
 pub mod field;
 pub mod krige;
 mod short_vec;
@@ -21,6 +23,8 @@ pub mod variogram;
 
 #[pymodule]
 mod gstools_core {
+    use crate::covmodel::CovModel;
+    use crate::krige::calc_field_krige_local;
     use crate::field::{summator, summator_fourier, summator_incompr};
     use crate::krige::{calculator_field_krige, calculator_field_krige_and_variance};
     use crate::variogram::{
@@ -28,7 +32,9 @@ mod gstools_core {
         variogram_unstructured,
     };
     use numpy::{IntoPyArray, PyArray1, PyArray2, PyReadonlyArray1, PyReadonlyArray2};
+    use pyo3::exceptions::PyValueError;
     use pyo3::prelude::*;
+    use pyo3::types::PyDict;
 
     #[pymodule_init]
     fn init(m: &Bound<'_, PyModule>) -> PyResult<()> {
@@ -116,6 +122,75 @@ mod gstools_core {
         let krig_vecs = krig_vecs.as_array();
         let cond = cond.as_array();
         calculator_field_krige(krige_mat, krig_vecs, cond, num_threads).into_pyarray(py)
+    }
+
+    /// Local kriging of one or many fields: `cond_val` has the shape
+    /// `(n_cond, n_fields)` (one column per field, NaN = missing in that
+    /// field; a single field is one column). Weights are cached per target
+    /// and neighbor mask. Returns `(field, error, n_used, stats)`, the arrays
+    /// with shape `(n_targets, n_fields)`.
+    ///
+    /// A target without neighbors (or fewer than `min_neighbors`) is NaN
+    /// with its count in `n_used`. Fields with `n_used <= unbiased + drift
+    /// terms` neighbors are kriged without drift (all drift terms dropped),
+    /// counted in `stats["n_without_drift"]`.
+    #[pyfunction(name = "calc_field_krige_local")]
+    #[pyo3(signature = (
+        cond_pos, cond_val, target_pos, cov_model_json, cond_err, drift_cond,
+        drift_target, unbiased, exact, local_radius, min_neighbors=1,
+        num_threads=None
+    ))]
+    #[allow(clippy::too_many_arguments, clippy::type_complexity)]
+    fn calc_field_krige_local_py<'py>(
+        py: Python<'py>,
+        cond_pos: PyReadonlyArray2<f64>,
+        cond_val: PyReadonlyArray2<f64>,
+        target_pos: PyReadonlyArray2<f64>,
+        cov_model_json: &str,
+        cond_err: PyReadonlyArray1<f64>,
+        drift_cond: PyReadonlyArray2<f64>,
+        drift_target: PyReadonlyArray2<f64>,
+        unbiased: bool,
+        exact: bool,
+        local_radius: f64,
+        min_neighbors: usize,
+        num_threads: Option<usize>,
+    ) -> PyResult<(
+        Bound<'py, PyArray2<f64>>,
+        Bound<'py, PyArray2<f64>>,
+        Bound<'py, PyArray2<u32>>,
+        Bound<'py, PyDict>,
+    )> {
+        let model = CovModel::from_json(cov_model_json)
+            .map_err(|e| PyValueError::new_err(e.to_string()))?;
+        let res = calc_field_krige_local(
+            cond_pos.as_array(),
+            cond_val.as_array(),
+            target_pos.as_array(),
+            &model,
+            cond_err.as_array(),
+            drift_cond.as_array(),
+            drift_target.as_array(),
+            unbiased,
+            exact,
+            local_radius,
+            min_neighbors,
+            num_threads,
+        )
+        .map_err(|e| PyValueError::new_err(e.to_string()))?;
+        let stats = PyDict::new(py);
+        stats.set_item("n_solves", res.stats.n_solves)?;
+        stats.set_item("n_hits_last", res.stats.n_hits_last)?;
+        stats.set_item("n_hits_hash", res.stats.n_hits_hash)?;
+        stats.set_item("n_skipped", res.stats.n_skipped)?;
+        stats.set_item("n_without_drift", res.stats.n_without_drift)?;
+        stats.set_item("max_masks_per_target", res.stats.max_masks_per_target)?;
+        Ok((
+            res.field.into_pyarray(py),
+            res.error.into_pyarray(py),
+            res.n_used.into_pyarray(py),
+            stats,
+        ))
     }
 
     #[pyfunction(name = "variogram_structured")]
