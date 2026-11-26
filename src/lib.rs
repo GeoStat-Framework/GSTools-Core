@@ -319,9 +319,10 @@ mod gstools_core {
     /// * 7 — `mps_cleanup_pass` takes `num_threads` and runs the pass over a
     ///   position-oriented dependency DAG (deterministic serial == parallel);
     ///   it now returns the effective thread count too.
+    /// * 8 — explicit active simulation masks for main and cleanup engines.
     #[pyfunction(name = "mps_api_version")]
     fn mps_api_version_py() -> u32 {
-        7
+        8
     }
 
     #[pyfunction(name = "mps_dist_block_cat_masked")]
@@ -749,6 +750,7 @@ mod gstools_core {
 
     #[pyfunction(name = "mps_simulate")]
     #[allow(clippy::too_many_arguments)]
+    #[pyo3(signature = (ti, ti_shape, initial_fields, conditioned, sim_shape, path, lag_matrices, u_start, u_fallback, offsets, n_neighbors, max_radius, variable_weights, metric_kinds, has_nan, d_max, p_norm, penalty_flat, penalty_offsets, penalty_ncat, threshold, scan_fraction, random_scan, distance_power, cond_weight, partial_boundary, num_threads, zone_ti, zone_offsets, zone_shapes, zone_d_max, node_domain, active_mask=None))]
     fn mps_simulate_py<'py>(
         py: Python<'py>,
         ti: PyReadonlyArray2<f64>,
@@ -783,6 +785,7 @@ mod gstools_core {
         zone_shapes: PyReadonlyArray2<i64>,
         zone_d_max: PyReadonlyArray2<f64>,
         node_domain: PyReadonlyArray1<i64>,
+        active_mask: Option<PyReadonlyArray1<u8>>,
     ) -> PyResult<MpsSimulationPyOutput<'py>> {
         // Own the arrays before detaching so Python code may run concurrently
         // without being able to mutate buffers borrowed by the Rust engine.
@@ -816,6 +819,7 @@ mod gstools_core {
         let zone_shapes = zone_shapes.as_array().to_owned();
         let zone_d_max = zone_d_max.as_array().to_owned();
         let node_domain = node_domain.as_array().to_owned();
+        let active_mask = active_mask.map(|mask| mask.as_array().to_owned());
 
         let output = py
             .detach(move || {
@@ -852,6 +856,7 @@ mod gstools_core {
                     zone_shapes.view(),
                     zone_d_max.view(),
                     node_domain.view(),
+                    active_mask.as_ref().map(|mask| mask.view()),
                 )
             })
             .map_err(PyValueError::new_err)?;
@@ -867,6 +872,7 @@ mod gstools_core {
 
     #[pyfunction(name = "mps_cleanup_pass")]
     #[allow(clippy::too_many_arguments)]
+    #[pyo3(signature = (ti, ti_shape, fields_in, conditioned, sim_shape, path, lag_matrices, u_start, u_fallback, offsets, n_neighbors, max_radius, variable_weights, metric_kinds, has_nan, d_max, p_norm, penalty_flat, penalty_offsets, penalty_ncat, threshold, scan_fraction, random_scan, distance_power, cond_weight, partial_boundary, num_threads, zone_ti, zone_offsets, zone_shapes, zone_d_max, node_domain, active_mask=None))]
     fn mps_cleanup_pass_py<'py>(
         py: Python<'py>,
         ti: PyReadonlyArray2<f64>,
@@ -901,6 +907,7 @@ mod gstools_core {
         zone_shapes: PyReadonlyArray2<i64>,
         zone_d_max: PyReadonlyArray2<f64>,
         node_domain: PyReadonlyArray1<i64>,
+        active_mask: Option<PyReadonlyArray1<u8>>,
     ) -> PyResult<MpsCleanupPyOutput<'py>> {
         // Own every array before detaching (the GIL-safety boundary, mirroring
         // mps_simulate): Python may run concurrently and must not mutate buffers
@@ -932,6 +939,7 @@ mod gstools_core {
         let zone_shapes = zone_shapes.as_array().to_owned();
         let zone_d_max = zone_d_max.as_array().to_owned();
         let node_domain = node_domain.as_array().to_owned();
+        let active_mask = active_mask.map(|mask| mask.as_array().to_owned());
 
         let (fields, strict_fallback_count, collapsed_lag_count, used_threads) = py
             .detach(move || {
@@ -968,6 +976,7 @@ mod gstools_core {
                     zone_shapes.view(),
                     zone_d_max.view(),
                     node_domain.view(),
+                    active_mask.as_ref().map(|mask| mask.view()),
                 )
             })
             .map_err(PyValueError::new_err)?;

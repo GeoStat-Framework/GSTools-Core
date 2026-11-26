@@ -139,6 +139,10 @@ ENGINE_CASES = (
     "field-infinite",
     "hard-nan",
     "hard-mask",
+    "active-mask-length",
+    "active-mask-value",
+    "inactive-path",
+    "inactive-hard",
     "offset-zero",
     "offset-unordered",
     "offset-overflow",
@@ -583,6 +587,21 @@ def probe(identifier):
         args[field_key][0, 0] = np.nan
     elif case == "hard-mask":
         args["conditioned"][0, 0] = 2
+    elif case == "active-mask-length":
+        args["active_mask"] = np.ones(2, dtype=np.uint8)
+    elif case == "active-mask-value":
+        args["active_mask"] = np.array([2], dtype=np.uint8)
+    elif case in {"inactive-path", "inactive-hard"}:
+        args["active_mask"] = np.zeros(1, dtype=np.uint8)
+        if case == "inactive-hard":
+            args.update(
+                path=ints([]).reshape(0, 1),
+                u_start=floats([]),
+                u_fallback=floats([]).reshape(0, 1),
+                node_domain=ints([]),
+            )
+            args["conditioned"][0, 0] = 1
+            args[field_key][0, 0] = 0.0
     elif case == "offset-zero":
         args["offsets"] = ints([[0]])
     elif case == "offset-unordered":

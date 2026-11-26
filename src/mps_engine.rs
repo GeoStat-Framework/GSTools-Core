@@ -95,6 +95,7 @@ fn build_neighbor_cache(
     conditioned: ArrayView2<'_, u8>,
     n_neighbors: ArrayView1<'_, i64>,
     max_radius: ArrayView1<'_, f64>,
+    active_mask: Option<ArrayView1<'_, u8>>,
 ) -> Vec<CachedNode> {
     let variable_count = conditioned.nrows();
     let sg_size = sim_shape.iter().product::<i64>() as usize;
@@ -153,6 +154,9 @@ fn build_neighbor_cache(
                     continue;
                 }
                 let flat = flat_index(&candidate, &strides);
+                if active_mask.is_some_and(|mask| mask[flat] == 0) {
+                    continue;
+                }
                 let dependency = path_maps[variable][flat];
                 if dependency == -1 || dependency < node as i64 {
                     if dependency >= 0 {
@@ -190,6 +194,7 @@ fn build_cleanup_neighbor_cache(
     n_neighbors: ArrayView1<'_, i64>,
     max_radius: ArrayView1<'_, f64>,
     variable_count: usize,
+    active_mask: Option<ArrayView1<'_, u8>>,
 ) -> Vec<CachedNode> {
     let strides = c_strides(sim_shape);
     let mut cache = Vec::with_capacity(path.nrows());
@@ -225,8 +230,12 @@ fn build_cleanup_neighbor_cache(
                 if !in_bounds {
                     continue;
                 }
+                let flat = flat_index(&candidate, &strides);
+                if active_mask.is_some_and(|mask| mask[flat] == 0) {
+                    continue;
+                }
                 selected.push(Neighbor {
-                    flat: flat_index(&candidate, &strides),
+                    flat,
                     lag: offset.to_vec(),
                 });
                 if selected.len() == n_neighbors[variable] as usize {
@@ -919,6 +928,7 @@ fn validate_engine_configuration(
     threshold: f64,
     scan_fraction: f64,
     cleanup: bool,
+    active_mask: Option<ArrayView1<'_, u8>>,
 ) -> Result<(), String> {
     if ti_shape.len() != sim_shape.len() {
         return Err("MPS TI and simulation dimensionality must agree".into());
@@ -952,9 +962,26 @@ fn validate_engine_configuration(
     {
         return Err("MPS threshold/weighting parameters and scan fraction are invalid".into());
     }
-    if fields.iter().any(|v| v.is_infinite()) || (cleanup && fields.iter().any(|v| !v.is_finite()))
-    {
-        return Err("MPS initial fields contain invalid nonfinite values".into());
+    if let Some(mask) = active_mask {
+        if mask.len() != fields.ncols() || mask.iter().any(|&v| v > 1) {
+            return Err("MPS active mask must be boolean and match the flattened grid".into());
+        }
+        let strides = c_strides(sim_shape);
+        for coords in path.rows() {
+            let flat = flat_index_iter(coords.iter().copied(), &strides);
+            if mask[flat] == 0 {
+                return Err("MPS path must not visit inactive cells".into());
+            }
+        }
+    }
+    for ((variable, flat), value) in fields.indexed_iter() {
+        let active = active_mask.is_none_or(|mask| mask[flat] != 0);
+        if !active && (!value.is_nan() || conditioned[(variable, flat)] != 0) {
+            return Err("MPS inactive fields must be NaN and cannot be conditioned".into());
+        }
+        if value.is_infinite() || (cleanup && active && !value.is_finite()) {
+            return Err("MPS initial fields contain invalid nonfinite values".into());
+        }
     }
     if conditioned
         .iter()
@@ -978,7 +1005,10 @@ fn validate_engine_configuration(
             .collect();
         for (variable, row) in fields.rows().into_iter().enumerate() {
             for (flat, value) in row.iter().enumerate() {
-                if value.is_nan() && !scheduled.contains(&flat) {
+                if value.is_nan()
+                    && active_mask.is_none_or(|mask| mask[flat] != 0)
+                    && !scheduled.contains(&flat)
+                {
                     return Err(format!("MPS undefined initial value for variable {variable} is absent from the path"));
                 }
             }
@@ -1244,6 +1274,7 @@ pub fn simulate_engine(
     zone_shapes: ArrayView2<'_, i64>,
     zone_d_max: ArrayView2<'_, f64>,
     node_domain: ArrayView1<'_, i64>,
+    active_mask: Option<ArrayView1<'_, u8>>,
 ) -> Result<SimulationOutput, String> {
     let variable_count = ti.nrows();
     let ti_size = checked_shape_size(ti_shape)?;
@@ -1296,6 +1327,7 @@ pub fn simulate_engine(
         threshold,
         scan_fraction,
         false,
+        active_mask,
     )?;
 
     // Domain 0 is the primary TI; domains 1.. are the zone TIs. `node_domain`
@@ -1332,6 +1364,7 @@ pub fn simulate_engine(
         conditioned,
         n_neighbors,
         max_radius,
+        active_mask,
     );
     let level_count = cache
         .iter()
@@ -1491,6 +1524,7 @@ pub fn cleanup_pass_engine(
     zone_shapes: ArrayView2<'_, i64>,
     zone_d_max: ArrayView2<'_, f64>,
     node_domain: ArrayView1<'_, i64>,
+    active_mask: Option<ArrayView1<'_, u8>>,
 ) -> Result<(Array2<f64>, usize, usize, usize), String> {
     let variable_count = ti.nrows();
     let ti_size = checked_shape_size(ti_shape)?;
@@ -1543,6 +1577,7 @@ pub fn cleanup_pass_engine(
         threshold,
         scan_fraction,
         true,
+        active_mask,
     )?;
     let n_zones = zone_offsets.len().saturating_sub(1);
     if node_domain.iter().any(|&d| d < 0 || d as usize > n_zones) {
@@ -1575,6 +1610,7 @@ pub fn cleanup_pass_engine(
         n_neighbors,
         max_radius,
         variable_count,
+        active_mask,
     );
     let (levels, _level_count, _max_width) = build_cleanup_levels(&cache, path, sim_shape);
 
@@ -1702,8 +1738,44 @@ mod tests {
             Array2::<i64>::zeros((0, 1)).view(),
             Array2::<f64>::zeros((0, 1)).view(),
             array![0_i64, 0_i64].view(),
+            None,
         )
         .expect("valid fixture")
+    }
+
+    #[test]
+    fn active_mask_excludes_holes_from_main_and_cleanup_neighbors() {
+        let path = array![[0_i64], [2_i64]];
+        let shape = array![3_i64];
+        let offsets = array![[-1_i64], [1_i64], [-2_i64], [2_i64]];
+        let conditioned = array![[0_u8, 0, 0]];
+        let neighbors = array![2_i64];
+        let radius = array![f64::NAN];
+        let mask = array![1_u8, 0, 1];
+        let cache = build_neighbor_cache(
+            path.view(),
+            shape.view(),
+            offsets.view(),
+            conditioned.view(),
+            neighbors.view(),
+            radius.view(),
+            Some(mask.view()),
+        );
+        assert!(cache[0].by_variable[0].is_empty());
+        assert_eq!(cache[1].by_variable[0].len(), 1);
+        assert_eq!(cache[1].by_variable[0][0].flat, 0);
+        let cleanup = build_cleanup_neighbor_cache(
+            path.view(),
+            shape.view(),
+            offsets.view(),
+            neighbors.view(),
+            radius.view(),
+            1,
+            Some(mask.view()),
+        );
+        assert_eq!(cleanup[0].by_variable[0].len(), 1);
+        assert_eq!(cleanup[0].by_variable[0][0].flat, 2);
+        assert_eq!(cleanup[1].by_variable[0][0].flat, 0);
     }
 
     #[test]
@@ -1783,6 +1855,7 @@ mod tests {
             Array2::<i64>::zeros((0, 1)).view(),
             Array2::<f64>::zeros((0, 1)).view(),
             array![0_i64, 0_i64].view(),
+            None,
         )
         .expect("valid cleanup fixture");
         (fields, strict, collapsed)
@@ -1841,6 +1914,7 @@ mod tests {
             array![2_i64].view(),
             array![f64::NAN].view(),
             1,
+            None,
         );
         let (levels, level_count, max_width) =
             build_cleanup_levels(&cache, path.view(), array![3_i64].view());
@@ -1884,6 +1958,7 @@ mod tests {
             Array2::<i64>::zeros((0, 1)).view(),
             Array2::<f64>::zeros((0, 1)).view(),
             array![0_i64].view(),
+            None,
         )
         .expect("valid variation fixture");
         assert_eq!(output.fields[(0, 1)], 6.0);

@@ -1,7 +1,8 @@
 """Smoke-test the MPS exports of an installed gstools-core wheel.
 
-Calls the current ABI-7 ``mps_simulate`` / ``mps_cleanup_pass`` signatures with
-explicit keyword arguments so a future positional change fails loudly here. Requires the versioned API export and the cleanup entry point in
+Calls the current API 8 ``mps_simulate`` / ``mps_cleanup_pass`` signatures with
+explicit keyword arguments so a future positional change fails loudly here.
+Requires the versioned API export and the cleanup entry point in
 addition to the distance/scan/simulate kernels.
 """
 
@@ -32,7 +33,7 @@ REQUIRED_EXPORTS = (
 )
 
 # Exact MPS interface revision supported by this paired smoke test.
-REQUIRED_API = 7
+REQUIRED_API = 8
 
 
 def _engine_kwargs(num_threads=1):
@@ -117,6 +118,21 @@ def main() -> None:
     )
     np.testing.assert_array_equal(cleaned, np.array([[0.0]]))
     assert (c_strict, c_collapsed, c_threads) == (0, 0, 1)
+
+    masked = _engine_kwargs()
+    masked.update(
+        active_mask=np.array([1, 0], dtype=np.uint8),
+        initial_fields=np.full((1, 2), np.nan),
+        conditioned=np.zeros((1, 2), dtype=np.uint8),
+        sim_shape=np.array([2], dtype=np.int64),
+        offsets=np.array([[1]], dtype=np.int64),
+    )
+    field = gstools_core.mps_simulate(**masked)[0]
+    np.testing.assert_array_equal(field, [[0.0, np.nan]])
+    masked.pop("initial_fields")
+    masked["fields_in"] = field
+    cleaned = gstools_core.mps_cleanup_pass(**masked)[0]
+    np.testing.assert_array_equal(cleaned, [[0.0, np.nan]])
 
     print(f"gstools-core MPS wheel smoke test (API {api}): PASS")
 

@@ -64,6 +64,7 @@ jobs:
           pip install "numpy>=1.20"
           pip install gstools-core --no-index --find-links dist --force-reinstall --no-deps
           python scripts/check_mps_wheel.py
+          python scripts/check_mps_boundaries.py --output native-boundaries.json
       - name: Upload Wheels Artifacts
         uses: actions/upload-artifact@v4
         with:

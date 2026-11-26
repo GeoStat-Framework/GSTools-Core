@@ -4,7 +4,7 @@ Run these source-only scripts with the interpreter in which the intended native
 wheel is installed. They require NumPy and use no network or temporary venv.
 
 - `python scripts/check_mps_wheel.py` checks required exports, exact supported
-  interface revision 7, and real main/cleanup calls with explicit keywords and
+  interface revision 8, and real main/cleanup calls with explicit masks and
   expected tuple shapes. Exit zero means these checks passed, not import alone.
 - `python scripts/check_mps_boundaries.py --output /tmp/native-boundaries.json`
   runs the invalid-input/numerical matrix in bounded child processes. It checks
