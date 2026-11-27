@@ -46,3 +46,7 @@ The steps shown here use [uv](https://docs.astral.sh/uv/), but every other Pytho
 - Now, you can build the crate and install it as a Python module into the current venv with `maturin develop`
 - For perfomance testing, you can compile the code optimized with `maturin develop --release`.
 - If you install GSTools into the same venv with `uv pip install gstools`, it will automatically use the local GSTools Core package installed with maturin.
+
+Installed-wheel Direct Sampling smoke and bounded boundary checks are documented
+in [scripts/README.md](scripts/README.md). Keep these source-only tools with the
+source archive and run them against the exact artifact selected for release.

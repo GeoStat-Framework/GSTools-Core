@@ -14,6 +14,9 @@ This crate includes
 - randomization methods for the random field generation
 - the matrix operations of the kriging methods
 - the variogram estimation
+- the Multiple Point Statistics Direct Sampling engine, including categorical
+  and continuous distances, masked training images, and deterministic
+  node-level Rayon scheduling
 
 The documentation can be found [here][doc_link].
 

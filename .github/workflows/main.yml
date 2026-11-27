@@ -61,8 +61,10 @@ jobs:
       - name: Install built wheel
         if: matrix.target == 'x86_64'
         run: |
+          pip install "numpy>=1.20"
           pip install gstools-core --no-index --find-links dist --force-reinstall --no-deps
-          python -c "import gstools_core"
+          python scripts/check_mps_wheel.py
+          python scripts/check_mps_boundaries.py --output native-boundaries.json
       - name: Upload Wheels Artifacts
         uses: actions/upload-artifact@v4
         with:
@@ -94,8 +96,9 @@ jobs:
           args: --release --out dist
       - name: Install built wheel
         run: |
+          pip install "numpy>=1.20"
           pip install gstools-core --no-index --find-links dist --force-reinstall --no-deps
-          python -c "import gstools_core"
+          python scripts/check_mps_wheel.py
       - name: Upload Wheels Artifacts
         uses: actions/upload-artifact@v4
         with:
@@ -132,16 +135,18 @@ jobs:
           args: --release --out dist
       - name: Install built wheel
         run: |
+          pip install "numpy>=1.20"
           pip install gstools-core --no-index --find-links dist --force-reinstall --no-deps
-          python -c "import gstools_core"
+          python scripts/check_mps_wheel.py
       - name: Build wheels - universal2
         uses: messense/maturin-action@v1
         with:
           args: --release --out dist
       - name: Install built wheel - universal2
         run: |
+          pip install "numpy>=1.20"
           pip install gstools-core --no-index --find-links dist --force-reinstall --no-deps
-          python -c "import gstools_core"
+          python scripts/check_mps_wheel.py
       - name: Upload wheels
         uses: actions/upload-artifact@v4
         with:

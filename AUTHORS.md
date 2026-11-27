@@ -13,3 +13,4 @@ and was created by following people.
 ## Contributors (in order of contributions)
 
 - Adam Reichold, Github: [@adamreichold](https://github.com/adamreichold)
+- Jeisson Leal, GitHub: [@jeilealr](https://github.com/jeilealr)

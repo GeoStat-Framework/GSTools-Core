@@ -1,6 +1,6 @@
 [package]
 name = "gstools-core"
-version = "1.3.0"
+version = "1.4.0"
 authors = ["Lennart Schüler <lennart.schueler@ufz.de>"]
 edition = "2021"
 description = "The core functions of GSTools"
@@ -11,7 +11,12 @@ documentation = "https://docs.rs/gstools-core"
 license = "LGPL-3.0-or-later"
 categories = ["science", "mathematics"]
 keywords = ["geostatistics", "srf", "kriging", "variogram", "python"]
-exclude = ["dist/", ".*"]
+# Keep source archives buildable without local studies, caches, or private notes.
+include = [
+    "src/**", "benches/*.rs", "benches/*.py", "scripts/*.py",
+    "scripts/README.md", "Cargo.toml", "Cargo.lock", "pyproject.toml",
+    "README.md", "CONTRIBUTING.md", "AUTHORS.md", "LICENSE", "katex-header.html",
+]
 
 [lib]
 name = "gstools_core"
@@ -28,8 +33,12 @@ debug = true
 lto = true
 codegen-units = 1
 
+[features]
+default = ["extension-module"]
+extension-module = ["pyo3/extension-module"]
+
 [dependencies]
-pyo3 = { version = "0.28", features = ["abi3-py38", "extension-module"] }
+pyo3 = { version = "0.28", features = ["abi3-py38"] }
 numpy = "0.28"
 ndarray = { version = "0.17", features = ["rayon", "approx"] }
 rayon = "1.10"
@@ -41,6 +50,10 @@ ndarray-rand = "0.16"
 
 [[bench]]
 name = "main"
+harness = false
+
+[[bench]]
+name = "mps"
 harness = false
 
 [package.metadata.docs.rs]

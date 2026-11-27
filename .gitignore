@@ -1,2 +1,5 @@
 debug/
 target/
+
+.DS_Store
+/graphify-out/
